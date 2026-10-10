@@ -1,0 +1,8 @@
+node_modules
+.git
+artifacts
+attachments
+screenshots
+android-signing
+public/downloads/*.apk
+*.apk
