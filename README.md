@@ -2,9 +2,9 @@
 
 Download the program. This page is not the app.
 
-**[Download Kin Studio](https://github.com/tilok360/kin-studio/releases/latest)**
+**[Download Kin Studio](https://github.com/tilok360/kin-studio/releases/latest)** · [Windows installer](https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe) · [Android APK](https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk)
 
-- **Android:** [Kin Studio APK](https://kin-studio.grok.me/downloads/Kin-Studio.apk). Open the file to install. Allow installs from Chrome if it asks. Update over the old app — do not uninstall first.
+- **Android:** [Kin Studio APK](https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk). Open the file to install. Allow installs from Chrome if it asks. Update over the old app — do not uninstall first.
 - **Windows:** `Kin-Studio-Desktop.zip`. Unzip it, run `Start Kin Studio.bat`, and leave that window open. Needs Google Chrome.
 - **iPhone:** open [kin-studio.grok.me](https://kin-studio.grok.me) in Safari, then Share → Add to Home Screen. Or install `Kin-Studio-iPhone.mobileconfig` from the same download page.
 

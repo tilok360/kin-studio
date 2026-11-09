@@ -861,6 +861,7 @@ function isWindows(){
   return /Windows|Win64|WOW64/i.test(navigator.userAgent||'');
 }
 function startDownload(url){
+  if(/^https?:/.test(url)){ var a=document.createElement('a'); a.href=url; a.rel='noopener'; a.style.display='none'; document.body.appendChild(a); a.click(); setTimeout(function(){ try{ a.remove(); }catch(_){} }, 1000); return; }
   var frame=document.createElement('iframe');
   frame.hidden=true;
   frame.setAttribute('aria-hidden','true');
@@ -876,7 +877,7 @@ function bindInstallButtons(){
     android.addEventListener('click', function(e){
       e.preventDefault(); e.stopPropagation();
       var iosSheet=$('iosSheet'); if(iosSheet) iosSheet.hidden=true;
-      startDownload('/downloads/Kin-Studio.apk');
+      startDownload('https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk');
       try{ liveToast('Downloading the Android app…'); }catch(_){}
     });
   }
@@ -886,7 +887,7 @@ function bindInstallButtons(){
       e.preventDefault(); e.stopPropagation();
       var iosSheet=$('iosSheet'); if(iosSheet) iosSheet.hidden=true;
       var sh=$('winSheet'); if(sh) sh.hidden=false;
-      startDownload('/downloads/Kin-Studio.exe');
+      startDownload('https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe');
       try{ liveToast('Downloading Kin-Studio.exe…'); }catch(_){}
     });
   }
@@ -894,7 +895,7 @@ function bindInstallButtons(){
     winFile.dataset.dl='1';
     winFile.addEventListener('click', function(e){
       e.preventDefault(); e.stopPropagation();
-      startDownload('/downloads/Kin-Studio.exe');
+      startDownload('https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe');
       try{ liveToast('Downloading Kin-Studio.exe…'); }catch(_){}
     });
   }
