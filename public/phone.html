@@ -187,6 +187,11 @@ html.windows-app .sheet-card{border-radius:16px}
 .gm-wyr button.me{border-color:var(--accent);background:#1a2a24}.gm-wyr button.kin{box-shadow:inset 0 0 0 2px #f0c674}
 #gmStage.busy .gm-act{opacity:.55;pointer-events:none}
 html.windows-app .gm-picker .gm-pick{min-height:56px}
+
+/* Toasts never block taps (they sat on top of the sheet Done buttons). */
+#liveToast{pointer-events:none}
+/* hidden install buttons really hide (the .apk-dl display rule beat the hidden attribute). */
+.apk-dl[hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -4183,6 +4188,45 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
   if($('winSheet')) $('winSheet').addEventListener('click', function(e){
     if(e.target===$('winSheet')) $('winSheet').hidden=true;
   });
+  /* Sheet fix (Nov 2026): the iPhone/Windows sheets sit below this script in the page, so the
+     bindings above ran before their buttons existed and "Done" did nothing. Bind again once the
+     page is parsed. Done, a tap on the dark backdrop, Esc, and the Android back button all close. */
+  function bindSheetUi(){
+    if(window.__kinSheetUi) return; window.__kinSheetUi=true;
+    var SHEETS=['winSheet','iosSheet','histSheet'];
+    function sheetOpen(){ for(var i=SHEETS.length-1;i>=0;i--){ var s=$(SHEETS[i]); if(s && !s.hidden) return s; } return null; }
+    var popping=false;
+    function closeSheet(sh, fromBack){
+      if(!sh || sh.hidden) return;
+      sh.hidden=true;
+      if(!fromBack){ try{ if(history.state && history.state.kinSheet===sh.id){ popping=true; history.back(); } }catch(_){} }
+    }
+    window.kinCloseSheet=function(id){ closeSheet($(id)); };
+    if($('btnIosSend')) $('btnIosSend').onclick=function(){ sendIosLink(); };
+    if($('btnIosCopy')) $('btnIosCopy').onclick=copyIosLink;
+    if($('btnWinDoInstall')) $('btnWinDoInstall').onclick=doWinInstall;
+    [['btnIosSheetClose','iosSheet'],['btnWinSheetClose','winSheet'],['btnHistClose','histSheet']].forEach(function(p){
+      var b=$(p[0]); if(b) b.onclick=function(e){ if(e) e.preventDefault(); closeSheet($(p[1])); };
+    });
+    SHEETS.forEach(function(id){
+      var sh=$(id); if(!sh) return;
+      sh.addEventListener('click', function(e){ if(e.target===sh) closeSheet(sh); });
+      try{
+        new MutationObserver(function(){
+          if(!sh.hidden){ try{ if(!(history.state && history.state.kinSheet===id)) history.pushState({kinSheet:id}, '', location.href); }catch(_){} }
+        }).observe(sh, { attributes:true, attributeFilter:['hidden'] });
+        if(!sh.hidden){ try{ history.pushState({kinSheet:id}, '', location.href); }catch(_){} }
+      }catch(_){}
+    });
+    window.addEventListener('popstate', function(){
+      if(popping){ popping=false; return; }
+      var sh=sheetOpen(); if(sh) closeSheet(sh, true);
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key==='Escape'){ var sh=sheetOpen(); if(sh){ e.preventDefault(); closeSheet(sh); } }
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bindSheetUi); else bindSheetUi();
   if(!isWindowsApp() && !isAndroidApp() && isWindows() && !isStandaloneApp() && !isEmbeddedPreview()){
     try{
       if(!sessionStorage.getItem('ksWinHint')){
