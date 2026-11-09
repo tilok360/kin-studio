@@ -14,6 +14,14 @@
 <title>Kin Studio</title>
 <script>window.KinKokoro={lastError:"",warmup:async()=>{},speak:async()=>{},interrupt(){}};</script>
 <script>try{if(window.KinDesktop&&window.KinDesktop.platform==="windows")document.documentElement.classList.add("windows-app");}catch(e){}</script>
+<script>
+/* Voice-file fallback (Nov 2026): if this host is missing a Kokoro voice file, load the identical file from Hugging Face, then from the Kin Studio GitHub repo. */
+(function(){try{if(window.__kinVoiceFallback)return;window.__kinVoiceFallback=true;var of=window.fetch.bind(window);
+window.fetch=function(input,init){var url=typeof input==="string"?input:(input&&input.href)||(input&&input.url)||"";var m=String(url).match(/kokoro\/voices\/([a-z0-9_]+)\.bin(?:\?|$)/i);
+if(!m)return of(input,init);var id=m[1];var alts=["https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/"+id+".bin","https://cdn.jsdelivr.net/gh/tilok360/kin-studio@main/public/kokoro/voices/"+id+".bin"];
+function next(i){if(i>=alts.length)return Promise.reject(new Error("Voice file not found: "+id));return of(alts[i]).then(function(r){return r.ok?r:next(i+1);},function(){return next(i+1);});}
+return of(input,init).then(function(r){return r.ok?r:next(0);},function(){return next(0);});};}catch(e){}})();
+</script>
 <script type="module" src="/kokoro-engine.js"></script>
 <style>
 :root{--bg:#0f1115;--card:#1a1d24;--border:#2a2f3a;--text:#e8eaed;--muted:#9aa0a6;--accent:#6b8f7e;--ok:#3dd6c6;--danger:#f07178;--pad:14px;--tap:48px}
