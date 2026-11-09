@@ -2,3 +2,5 @@ node_modules
 .vercel
 *.jks
 artifacts/kinstudio-release.jks
+*.keystore
+HANDOFF*.txt

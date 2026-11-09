@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Kin Studio. Copyright (c) 2026 Christopher Klink (tilok360). All rights reserved. No permission to copy, modify or redistribute; see LICENSE. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
@@ -12,6 +13,7 @@
 <link rel="manifest" href="/__grok/manifest.webmanifest">
 <title>Kin Studio</title>
 <script>window.KinKokoro={lastError:"",warmup:async()=>{},speak:async()=>{},interrupt(){}};</script>
+<script>try{if(window.KinDesktop&&window.KinDesktop.platform==="windows")document.documentElement.classList.add("windows-app");}catch(e){}</script>
 <script type="module" src="/kokoro-engine.js"></script>
 <style>
 :root{--bg:#0f1115;--card:#1a1d24;--border:#2a2f3a;--text:#e8eaed;--muted:#9aa0a6;--accent:#6b8f7e;--ok:#3dd6c6;--danger:#f07178;--pad:14px;--tap:48px}
@@ -39,6 +41,9 @@ textarea{min-height:72px;resize:vertical}
 .btn{min-height:var(--tap);width:100%;border:none;border-radius:10px;padding:12px;font-weight:600;font-size:.9rem;background:var(--accent);color:#fff}
 .btn.secondary{background:#2a2f3a}.btn.ok{background:#1a5c54}.btn.danger{background:var(--danger)}
 .btn:disabled{opacity:.5}
+a.btn{display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none}
+.archive-drop{border:1px dashed var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted);margin:8px 0}
+.archive-drop.over{border-color:var(--accent);color:var(--text)}
 .hint{font-size:.78rem;color:var(--muted);margin:0 0 8px}
 .status{font-size:.78rem;color:var(--ok);min-height:1.1em}
 .error{color:var(--danger)}
@@ -114,20 +119,90 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
 #pin-pgOut,#pin-vidOut{background:#161a22;border:1px solid #3a3f4a;border-radius:12px;padding:10px;margin:0 0 12px}
 #pin-pgOut textarea,#pin-vidOut textarea{margin:0}
 
+html.windows-app,html.windows-app body{background:#10140f;font-family:"Segoe UI Variable Text","Segoe UI",sans-serif}
+html.windows-app header{position:fixed;inset:0 auto 0 0;width:228px;display:flex;flex-direction:column;padding:22px 14px 16px;border-bottom:0;border-right:1px solid #2a332c;background:#161b16}
+html.windows-app header .top{flex-direction:column;align-items:flex-start;gap:2px}
+html.windows-app h1{font-size:1.35rem;font-weight:650;letter-spacing:-.03em}
+html.windows-app header .top::after{content:"Desktop";display:block;margin-top:2px;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:#8ea396}
+html.windows-app #btnAndroidDl,html.windows-app #btnWinInstall,html.windows-app #btnIosInstall{display:none!important}
+html.windows-app nav{flex-direction:column;align-items:stretch;gap:2px;margin-top:22px;overflow:visible}
+html.windows-app .tab{width:100%;text-align:left;min-height:36px;padding:0 12px;border-radius:8px;font-size:.92rem}
+html.windows-app .tab.active{background:#243028;color:#f4f7f5;box-shadow:inset 3px 0 0 #8fbfa4}
+html.windows-app main{margin:0 0 0 228px;max-width:none;padding:22px 28px 40px}
+html.windows-app .card{border-radius:14px;padding:18px 18px 16px;background:#171c17}
+html.windows-app input,html.windows-app select,html.windows-app textarea{font-size:15px;border-radius:8px;background:#10140f}
+html.windows-app .btn{width:auto;min-height:38px;padding:8px 14px;border-radius:8px}
+html.windows-app .row>*{flex:0 1 auto}
+html.windows-app .chat-actions .btn,html.windows-app .chat-tools .btn{width:100%}
+html.windows-app #p-chat.active{height:calc(100dvh - 48px)}
+html.windows-app .chat-shell{border-radius:14px}
+html.windows-app .chat-log{padding:18px 22px}
+html.windows-app #liveToast{left:auto;right:28px;bottom:24px;width:min(360px,40vw)}
+html.windows-app .sheet{align-items:center}
+html.windows-app .sheet-card{border-radius:16px}
+
+/* ---- Games tab ---- */
+.gm-notice{border-left:3px solid var(--accent);padding:6px 10px;background:#12151a;border-radius:8px}
+.gm-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:8px}
+.gm-pick{min-height:64px;border:1px solid var(--border);border-radius:12px;background:#12151a;color:var(--text);font-weight:650;font-size:.9rem;padding:10px;text-align:left;cursor:pointer}
+.gm-pick small{display:block;color:var(--muted);font-weight:400;font-size:.72rem;margin-top:3px}
+.gm-pick.on{border-color:var(--accent);background:#1a2a24}
+.gm-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.gm-head strong{font-size:1rem}
+.gm-score{font-size:.8rem;color:var(--muted)}
+.gm-log{max-height:260px;min-height:90px;border:1px solid var(--border);border-radius:12px;margin:10px 0 6px}
+.gm-sys{align-self:center;font-size:.74rem;color:var(--muted);text-align:center;max-width:95%}
+.gm-sys.warn{color:#f0c674}.gm-sys.err{color:var(--danger)}
+.gm-q{font-size:1rem;font-weight:600;margin:4px 0 8px}
+.gm-book{font-size:.72rem;color:var(--muted);margin-bottom:6px}
+.gm-choices{display:grid;grid-template-columns:1fr;gap:6px}
+@media(min-width:600px){.gm-choices{grid-template-columns:1fr 1fr}}
+.gm-choice{min-height:46px;border:1px solid var(--border);border-radius:10px;background:#12151a;color:var(--text);text-align:left;padding:8px 12px;font-size:.9rem;cursor:pointer}
+.gm-choice.right{border-color:var(--ok);background:#143a34}.gm-choice.wrong{border-color:var(--danger);background:#3a1a1e}
+.gm-board{display:grid;grid-template-columns:repeat(8,1fr);width:min(100%,420px);aspect-ratio:1;margin:6px auto;border:2px solid #2a3a34;border-radius:6px;overflow:hidden;user-select:none}
+.gm-sq{display:flex;align-items:center;justify-content:center;font-size:min(9vw,38px);line-height:1;border:0;padding:0;cursor:pointer;position:relative;font-family:"Segoe UI Symbol","Noto Sans Symbols 2","DejaVu Sans",system-ui,sans-serif}
+.gm-sq.l{background:#c9d3c4}.gm-sq.d{background:#6b8f7e}
+.gm-sq.sel{box-shadow:inset 0 0 0 3px #f0c674}.gm-sq.last{box-shadow:inset 0 0 0 3px #3dd6c688}
+.gm-sq.tgt::after{content:"";position:absolute;width:24%;height:24%;border-radius:50%;background:#10141888}
+.gm-sq.chk{background:#e06c75!important}
+.gm-sq .pw{color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 1px #000}.gm-sq .pb{color:#111;text-shadow:0 0 1px #fff8}
+.gm-coord{position:absolute;left:2px;bottom:1px;font-size:9px;color:#0008;font-family:system-ui}
+.gm-ttt{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:min(100%,300px);margin:6px auto}
+.gm-ttt button{aspect-ratio:1;border:1px solid var(--border);border-radius:12px;background:#12151a;color:var(--text);font-size:2.2rem;font-weight:700;cursor:pointer}
+.gm-ttt button .n{font-size:.7rem;color:var(--muted);font-weight:400}
+.gm-ttt button.win{border-color:var(--ok);background:#143a34}
+.gm-c4{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;width:min(100%,420px);margin:6px auto;background:#1c3b6b;padding:6px;border-radius:12px}
+.gm-c4 .cell{aspect-ratio:1;border-radius:50%;background:#0f1115;border:0;padding:0;cursor:pointer}
+.gm-c4 .cell.x{background:#e06c75}.gm-c4 .cell.o{background:#f0c674}.gm-c4 .cell.win{box-shadow:0 0 0 3px #fff inset}
+.gm-c4h{display:grid;grid-template-columns:repeat(7,1fr);width:min(100%,420px);margin:0 auto;font-size:.72rem;color:var(--muted);text-align:center}
+.gm-yn{display:flex;gap:8px;flex-wrap:wrap}.gm-yn .btn{flex:1 1 80px}
+.gm-inv{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.gm-inv .chip button{background:none;border:0;color:var(--muted);margin-left:4px;cursor:pointer;padding:0 2px}
+.gm-hp{display:flex;align-items:center;gap:8px;margin:6px 0}
+.gm-hp .bar{flex:1;height:10px;background:#12151a;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.gm-hp .bar i{display:block;height:100%;background:var(--ok)}
+.gm-hp button{min-width:40px;min-height:36px;border:0;border-radius:8px;background:#2a2f3a;color:var(--text);font-weight:700}
+.gm-wyr{display:grid;grid-template-columns:1fr;gap:8px}@media(min-width:600px){.gm-wyr{grid-template-columns:1fr 1fr}}
+.gm-wyr button{min-height:70px;border:1px solid var(--border);border-radius:12px;background:#12151a;color:var(--text);font-size:.92rem;padding:10px;text-align:left;cursor:pointer}
+.gm-wyr button.me{border-color:var(--accent);background:#1a2a24}.gm-wyr button.kin{box-shadow:inset 0 0 0 2px #f0c674}
+#gmStage.busy .gm-act{opacity:.55;pointer-events:none}
+html.windows-app .gm-picker .gm-pick{min-height:56px}
 </style>
 </head>
 <body>
 <header>
-  <div class="top"><h1>Kin Studio</h1><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><a class="apk-dl secondary" href="/downloads/Kin-Studio.apk" download="Kin-Studio.apk" id="btnAndroidDl">Android</a><button type="button" class="apk-dl secondary" id="btnWinInstall">Windows</button><button type="button" class="apk-dl" id="btnIosInstall">iPhone</button><span class="badge" id="keyHint">API: not set</span></div></div>
+  <div class="top"><h1>Kin Studio</h1><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="apk-dl secondary" id="btnAndroidDl">Android</button><button type="button" class="apk-dl secondary" id="btnWinInstall">Windows</button><button type="button" class="apk-dl" id="btnIosInstall">iPhone</button><span class="badge" id="keyHint">API: not set</span></div></div>
   <nav aria-label="Studio sections">
     <button type="button" class="tab active" data-p="guide">Guide</button>
     <button type="button" class="tab" data-p="chat">Chat</button>
+    <button type="button" class="tab" data-p="games">Games</button>
     <button type="button" class="tab" data-p="voices">Voices</button>
     <button type="button" class="tab" data-p="character">Characters</button>
     <button type="button" class="tab" data-p="persona">Personas</button>
     <button type="button" class="tab" data-p="group">Groups</button>
     <button type="button" class="tab" data-p="library">Library</button>
-    <button type="button" class="tab" data-p="prompt">Prompt</button>
+    <button type="button" class="tab" data-p="archive">Archive</button>
+    <button type="button" class="tab" data-p="prompt">Vignette</button>
     <button type="button" class="tab" data-p="selfie">Selfie</button>
     <button type="button" class="tab" data-p="tools">Tools</button>
     <button type="button" class="tab" data-p="settings">Settings</button>
@@ -194,7 +269,7 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
       <button type="button" class="btn secondary" id="btnGenerateVoice">Generate voice</button>
     </div>
     <div class="row" style="margin-top:8px">
-      <button type="button" class="btn secondary" id="btnStopVoice">Stop</button>
+      <button type="button" class="btn secondary" id="btnStopVoice2">Stop</button>
     </div>
     <div id="vCandidates"></div>
     <p class="status" id="vStatus" role="status" aria-live="polite"></p>
@@ -237,12 +312,7 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
 
 <section id="p-character" class="panel">
   <div class="card">
-    <p class="hint">Kindroid V2 only (V1 retired Oct 1, 2026). Copy fields in paste order, or Push the ones the public API accepts. Equinox V7 and Prism V7.5 are retired. Lyric and Lucid V8 retire Dec 1, 2026. Current selfie engines: Atelier and Tableau. Video selfies are V4.</p>
-    <label>Plan caps</label>
-    <select id="kinPlan">
-      <option value="ultra" selected>Ultra — additional context 2500, user backstory 1000</option>
-      <option value="max">MAX — additional context 5000, user backstory 2000</option>
-    </select>
+    <p class="hint">Each field has Copy, in Kindroid paste order. Import or export JSON anytime.</p>
     <div class="row">
       <button type="button" class="btn secondary" id="btnImportChar">Import JSON</button>
       <button type="button" class="btn secondary" id="btnExportChar">Export this</button>
@@ -268,31 +338,11 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
     <input type="file" id="cPhotoFile" accept="image/*" hidden>
     <input type="hidden" id="cAvatar">
     <label>Selfie template <button type="button" class="copy-mini" data-ccopy="cSelfie" data-clabel="Selfie template">Copy</button></label><textarea id="cSelfie" rows="2"></textarea>
+    <label>Avatar generator <span class="lim" id="lim-agen">0/200</span> <button type="button" class="copy-mini" data-ccopy="cAvatarGen" data-clabel="Avatar generator">Copy</button></label><textarea id="cAvatarGen" maxlength="200" rows="2" placeholder="Short line for the avatar generator"></textarea>
     <label>Avatar description (Atelier) <span class="lim" id="lim-app">0/800</span> <button type="button" class="copy-mini" data-ccopy="cAppearance" data-clabel="Avatar description (Atelier)">Copy</button></label><textarea id="cAppearance" maxlength="800" rows="3"></textarea>
-    <p class="hint">[body: …] and &lt;(ext:1.6)&gt; belong in this box only. Anything after /// is not used for the image. no-sys does nothing in Vignette.</p>
-    <details class="acc">
-      <summary>Avatar notation</summary>
-      <p class="hint">[body: tall, athletic build] — custom avatars only, for stronger adherence. About 150 characters, then it is cut. Keep it sparse. Too many traits can stay visible, including through clothes.</p>
-      <label>Body <span class="lim" id="lim-avbody">0/150</span></label>
-      <input id="avBody" maxlength="150" placeholder="tall, athletic build">
-      <p class="hint">&lt;face&gt; can go in the prompt or the avatar description. Face only: expression, eyes, makeup, facial hair. Leave out pose, hands, props, clothing, and style. Too many cause bobbleheads. In a group selfie, brackets in the shared scene do nothing to faces. Put them in each avatar description or that person's prompt.</p>
-      <label>Face</label>
-      <input id="avFace" placeholder="calm expression, green eyes">
-      <p class="hint">&lt;(ext:1.6)&gt; — avatar description only. &lt;ext:1.6&gt; is ignored. Range 1.1 to 3.0, default 1.6. Higher blends more of the body around the head, so the head fits better and the face has less detail. Lower keeps more face detail and is more likely to look out of proportion.</p>
-      <label>Face blend <span class="lim" id="lim-avext">1.6</span></label>
-      <input id="avExt" type="number" min="1.1" max="3" step="0.1" value="1.6">
-      <label>Rest of the description</label>
-      <textarea id="avLook" rows="2" placeholder="Hair and clothing. Not inside the brackets."></textarea>
-      <label>After /// <span class="hint">not used for the image</span></label>
-      <input id="avNote" placeholder="Notes Kindroid will ignore">
-      <p class="status" id="avNotationStatus" role="status"></p>
-      <div class="row">
-        <button type="button" class="btn" id="btnWriteAvatar">Write into Atelier</button>
-        <button type="button" class="btn secondary" id="btnCopyAvatarLine">Copy line</button>
-      </div>
-    </details>
     <label>Avatar description (Tableau) <span class="lim" id="lim-tab">0/800</span> <button type="button" class="copy-mini" data-ccopy="cDescTableau" data-clabel="Avatar description (Tableau)">Copy</button></label><textarea id="cDescTableau" maxlength="800" rows="3"></textarea>
     <label>Facial description <span class="lim" id="lim-face">0/200</span> <button type="button" class="copy-mini" data-ccopy="cFace" data-clabel="Facial description">Copy</button></label><textarea id="cFace" maxlength="200" rows="2"></textarea>
+    <label>Voice description <span class="lim" id="lim-vdesc">0/1000</span> <button type="button" class="copy-mini" data-ccopy="cVoiceDesc" data-clabel="Voice description">Copy</button></label><textarea id="cVoiceDesc" maxlength="1000" rows="4" placeholder="Timbre, pace, and mood"></textarea>
     <label>AI ID <button type="button" class="copy-mini" data-ccopy="cAiId" data-clabel="AI ID">Copy</button></label><input id="cAiId" placeholder="AI ID">
     <label>Voice <button type="button" class="copy-mini" data-ccopy="cVoice" data-clabel="Voice">Copy</button></label><select id="cVoice"></select>
     <label>Tag line <span class="lim" id="lim-tag">0/100</span> <button type="button" class="copy-mini" data-ccopy="cTag" data-clabel="Tag line">Copy</button></label><input id="cTag" maxlength="100">
@@ -309,18 +359,6 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
       <label>Response directives <span class="lim" id="lim-dir">0/250</span> <button type="button" class="copy-mini" data-ccopy="cDir" data-clabel="Response directives">Copy</button></label><textarea id="cDir" maxlength="250" rows="2"></textarea>
       <label>Example message <span class="lim" id="lim-ex">0/750</span> <button type="button" class="copy-mini" data-ccopy="cExample" data-clabel="Example message">Copy</button></label><textarea id="cExample" maxlength="750" rows="2"></textarea>
       <label>Additional context <span class="lim" id="lim-add">0/2500</span> <button type="button" class="copy-mini" data-ccopy="cAdditional" data-clabel="Additional context">Copy</button></label><textarea id="cAdditional" maxlength="2500" rows="4"></textarea>
-      <label>Current scene <span class="lim" id="lim-scene">0/160</span> <button type="button" class="copy-mini" data-ccopy="cScene" data-clabel="Current scene">Copy</button></label><textarea id="cScene" maxlength="160" rows="2" placeholder="Pushed as current scene"></textarea>
-      <label>Author notes <span class="lim" id="lim-notes">0/1000</span> <button type="button" class="copy-mini" data-ccopy="cNotes" data-clabel="Author notes">Copy</button></label><textarea id="cNotes" maxlength="1000" rows="2" placeholder="Your notes only. Not pushed."></textarea>
-      <label>LLM flair <button type="button" class="copy-mini" data-ccopy="cFlair" data-clabel="LLM flair">Copy</button></label>
-      <select id="cFlair">
-        <option value="">Not set — pick in Kindroid → Models</option>
-        <option value="Companion">Companion</option>
-        <option value="Roleplay">Roleplay</option>
-        <option value="Narrative">Narrative</option>
-        <option value="Minimal">Minimal</option>
-        <option value="Classic">Classic</option>
-      </select>
-      <p class="hint">Push sends name, personality, key memories, response directive, example message, additional context, and current scene. Learned Context (growth, facts, threads), author notes, flair, greeting, and avatar text stay copy-only. The public API cannot write them.</p>
     </details>
     <div class="row" style="margin-top:10px">
       <button type="button" class="btn ok" id="btnSaveCharBottom">Save character</button>
@@ -449,7 +487,7 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
 <section id="p-settings" class="panel">
   <div class="card">
     <h2 style="margin:0 0 6px;font-size:1.15rem">API key</h2>
-    <p class="hint">Kindroid → Profile Settings → API & advanced integrations. Paste the kn_ key, then Save. It stays on this phone.</p>
+    <p class="hint">Kindroid → Profile Settings → API & advanced integrations. Paste the kn_ key, then Save. It stays on this device.</p>
     <label>Kindroid API key</label>
     <input id="apiKey" type="text" placeholder="kn_…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done" inputmode="text">
     <p class="hint" id="keyState">API: not set — paste, then tap Save API key</p>
@@ -457,8 +495,9 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
       <button type="button" class="btn" id="btnSaveSet">Save API key</button>
     </div>
     <p class="status" id="setStatus" role="status" aria-live="polite"></p>
+    <p class="hint" id="diskWhere" hidden></p>
     <div class="section">Send to others</div>
-    <p class="hint">iPhone, Windows, and Android friends use their own kn_ key. Source and the offline desktop pack: <a href="https://github.com/tilok360/kin-studio" style="color:#6b8f7e">github.com/tilok360/kin-studio</a></p>
+    <p class="hint">iPhone friends get a link, not an APK. Paste the public Kin Studio page if you send from the Android app. Auto-filled when you open the web app.</p>
     <label>Public link for iPhone</label>
     <input id="shareUrl" type="url" placeholder="https://…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
     <div class="row">
@@ -504,6 +543,27 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
   </div>
 </section>
 
+<section id="p-archive" class="panel">
+  <div class="card">
+    <h2 style="margin:0 0 6px;font-size:1.15rem">Archive</h2>
+    <p class="hint">Kindroid → Profile → Preferences, at the bottom, <strong>Export data</strong>. They email the file (about once every 30 days). Drop it here. Each kin is added to the <strong>Characters</strong> tab. If that person is already in the app, you choose replace, add new, or skip. The file stays on this device. A folder save is optional, for photos and messages.</p>
+    <div class="archive-drop" id="archiveDrop">Drop the export here, or use Choose export. It is usually named kindroid-export-…</div>
+    <input type="file" id="archiveFile" accept=".json,.txt,.jsonl,.ndjson,.zip,.gz,application/json,application/zip,application/gzip" hidden>
+    <div class="row">
+      <button type="button" class="btn" id="btnArchivePick">Choose export</button>
+      <button type="button" class="btn secondary" id="btnArchiveFolder">Choose folder</button>
+      <button type="button" class="btn ok" id="btnArchiveSave" disabled>Save into folder</button>
+      <button type="button" class="btn danger" id="btnArchiveStop" hidden>Stop</button>
+    </div>
+    <p class="hint" id="archiveFolder">No folder yet. Chrome or Edge can write the folder. On iPhone Safari, use Download for iPhone — Safari saves the file to Files.</p>
+    <p class="status" id="archiveStatus" role="status" aria-live="polite"></p>
+    <div class="row">
+      <a class="btn" id="btnArchiveIos" download="kin-studio-archive.json" hidden>Download for iPhone</a>
+      <button type="button" class="btn secondary" id="btnArchiveText" disabled>Download text only</button>
+    </div>
+    <div id="archiveList"></div>
+  </div>
+</section>
 
 <section id="p-guide" class="panel active">
   <div class="card">
@@ -512,8 +572,7 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
     <p class="hint"><strong>Send to iPhone</strong> — tap iPhone → Send to someone. They open the link in Safari → Share → Add to Home Screen. Each person uses their own kn_ key. Do not send your key.</p>
     <p class="hint"><strong>iPhone install</strong> — open the link in Safari (not Chrome). Share → Add to Home Screen. Same studio, full screen. Apple does not allow an unsigned iPhone app file like the Android APK.</p>
     <p class="hint"><strong>Android</strong> — tap Android for the APK, Update (do not uninstall).</p>
-    <p class="hint"><strong>Windows</strong> — tap Windows → open in Chrome → Install. No Edge.</p>
-    <p class="hint"><strong>Download</strong> — <a href="https://github.com/tilok360/kin-studio/releases/latest" style="color:#6b8f7e">GitHub release</a> for the offline desktop pack and the iPhone profile. Source: <a href="https://github.com/tilok360/kin-studio" style="color:#6b8f7e">github.com/tilok360/kin-studio</a></p>
+    <p class="hint"><strong>Windows</strong> — tap Windows and open <strong>Kin-Studio.exe</strong>. It is its own window. Not a Chrome tab. Not Edge.</p>
     <p class="hint"><strong>Guide</strong> — this page<br>
     <p class="hint"><strong>Chat</strong> — 1:1 send, listen, rewind. History loads the old thread so Replay works on past lines. Import the Kindroid chat-exporter JSON if you already downloaded it.<br>
     <strong>Voices</strong> — 28 Kokoro models, Test / Stop<br>
@@ -521,8 +580,9 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
     <strong>Personas</strong> — name, label, gender, backstory, avatar style, appearance, face<br>
     <strong>Groups</strong> — group ID and turns<br>
     <strong>Library</strong> — import / export JSON<br>
-    <strong>Prompt</strong> — stills chips → copy into Kindroid<br>
-    <p class="hint"><strong>Selfie</strong> — Atelier / Tableau stills, V4 video (8s or 15s)<br>
+    <strong>Archive</strong> — drop Kindroid’s email export. Those kins show up on Characters. If one is already there, choose replace, add new, or skip.<br>
+    <strong>Vignette</strong> — a short scene in prose. Copy it into the Kindroid selfie box.<br>
+    <strong>Selfie</strong> — V4 video (beats, tracking, POV, quote-gesture)<br>
     <strong>Tools</strong> — test key, ping<br>
     <strong>Settings</strong> — save kn_ key, speech, OpenDyslexic</p>
     <ol class="hint" style="padding-left:18px">
@@ -555,7 +615,7 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
     <p class="status" id="libStatus"></p>
   </div>
 </section>
-<section id="p-prompt" class="panel"><div class="card"><h2 style="margin:0 0 6px;font-size:1.15rem">Prompt builder</h2><p class="hint">Stills chips for the scene prompt. Cap 2000. Do not put [body: …] or &lt;(ext: )&gt; here. Face brackets in a shared group scene do not change faces.</p><p class="hint" style="margin-top:10px">SHOT</p><div id="pgShot"><button type="button" class="chip" data-g="pgShot" data-v="Candid selfie">Candid selfie</button><button type="button" class="chip" data-g="pgShot" data-v="Close-up">Close-up</button><button type="button" class="chip" data-g="pgShot" data-v="Selfie further away">Selfie further away</button><button type="button" class="chip" data-g="pgShot" data-v="Action shot">Action shot</button><button type="button" class="chip" data-g="pgShot" data-v="From above">From above</button><button type="button" class="chip" data-g="pgShot" data-v="Low angle">Low angle</button><button type="button" class="chip" data-g="pgShot" data-v="Wide group shot">Wide group shot</button><button type="button" class="chip" data-g="pgShot" data-v="Portrait">Portrait</button><button type="button" class="chip" data-g="pgShot" data-v="Shoulder-up portrait">Shoulder-up portrait</button><button type="button" class="chip" data-g="pgShot" data-v="Three-quarter view">Three-quarter view</button><button type="button" class="chip" data-g="pgShot" data-v="Full body">Full body</button><button type="button" class="chip" data-g="pgShot" data-v="Medium shot">Medium shot</button><button type="button" class="chip" data-g="pgShot" data-v="Mirror selfie">Mirror selfie</button><button type="button" class="chip" data-g="pgShot" data-v="Profile">Profile</button><button type="button" class="chip" data-g="pgShot" data-v="Cowboy shot">Cowboy shot</button><button type="button" class="chip" data-g="pgShot" data-v="Over-the-shoulder shot">Over-the-shoulder shot</button><button type="button" class="chip" data-g="pgShot" data-v="Establishing shot">Establishing shot</button></div><p class="hint" style="margin-top:10px">POSE</p><div id="pgPose"><button type="button" class="chip" data-g="pgPose" data-v="Facing camera">Facing camera</button><button type="button" class="chip" data-g="pgPose" data-v="Looking down">Looking down</button><button type="button" class="chip" data-g="pgPose" data-v="Looking over shoulder">Looking over shoulder</button><button type="button" class="chip" data-g="pgPose" data-v="Walking toward camera">Walking toward camera</button><button type="button" class="chip" data-g="pgPose" data-v="Walking away (back to camera)">Walking away (back to camera)</button><button type="button" class="chip" data-g="pgPose" data-v="Facing away entirely">Facing away entirely</button><button type="button" class="chip" data-g="pgPose" data-v="Waving">Waving</button><button type="button" class="chip" data-g="pgPose" data-v="Raising a glass">Raising a glass</button><button type="button" class="chip" data-g="pgPose" data-v="Pointing into distance">Pointing into distance</button><button type="button" class="chip" data-g="pgPose" data-v="Holding hands">Holding hands</button><button type="button" class="chip" data-g="pgPose" data-v="Jumping mid-air">Jumping mid-air</button><button type="button" class="chip" data-g="pgPose" data-v="Sitting upright">Sitting upright</button><button type="button" class="chip" data-g="pgPose" data-v="Arms crossed">Arms crossed</button><button type="button" class="chip" data-g="pgPose" data-v="Power stance">Power stance</button><button type="button" class="chip" data-g="pgPose" data-v="Hands in pockets">Hands in pockets</button><button type="button" class="chip" data-g="pgPose" data-v="One hand in hair">One hand in hair</button><button type="button" class="chip" data-g="pgPose" data-v="Leaning on a railing">Leaning on a railing</button><button type="button" class="chip" data-g="pgPose" data-v="Sitting on steps">Sitting on steps</button><button type="button" class="chip" data-g="pgPose" data-v="Head tilt">Head tilt</button><button type="button" class="chip" data-g="pgPose" data-v="Chin down">Chin down</button><button type="button" class="chip" data-g="pgPose" data-v="Checking a phone">Checking a phone</button><button type="button" class="chip" data-g="pgPose" data-v="Crouching">Crouching</button><button type="button" class="chip" data-g="pgPose" data-v="Kneeling">Kneeling</button><button type="button" class="chip" data-g="pgPose" data-v="Weight on one hip">Weight on one hip</button><button type="button" class="chip" data-g="pgPose" data-v="Stretching">Stretching</button><button type="button" class="chip" data-g="pgPose" data-v="Looking off-camera">Looking off-camera</button></div><p class="hint" style="margin-top:10px">EXPRESSION</p><div id="pgExpr"><button type="button" class="chip" data-g="pgExpr" data-v="Happy">Happy</button><button type="button" class="chip" data-g="pgExpr" data-v="Knowing smile">Knowing smile</button><button type="button" class="chip" data-g="pgExpr" data-v="Smirking">Smirking</button><button type="button" class="chip" data-g="pgExpr" data-v="Laughing">Laughing</button><button type="button" class="chip" data-g="pgExpr" data-v="Sad">Sad</button><button type="button" class="chip" data-g="pgExpr" data-v="Crying">Crying</button><button type="button" class="chip" data-g="pgExpr" data-v="Shocked">Shocked</button><button type="button" class="chip" data-g="pgExpr" data-v="Angry">Angry</button><button type="button" class="chip" data-g="pgExpr" data-v="Jealous">Jealous</button><button type="button" class="chip" data-g="pgExpr" data-v="Rolling eyes">Rolling eyes</button><button type="button" class="chip" data-g="pgExpr" data-v="Calm">Calm</button><button type="button" class="chip" data-g="pgExpr" data-v="Thoughtful">Thoughtful</button><button type="button" class="chip" data-g="pgExpr" data-v="Neutral">Neutral</button><button type="button" class="chip" data-g="pgExpr" data-v="Soft smile">Soft smile</button><button type="button" class="chip" data-g="pgExpr" data-v="Closed-mouth smile">Closed-mouth smile</button><button type="button" class="chip" data-g="pgExpr" data-v="Grin">Grin</button><button type="button" class="chip" data-g="pgExpr" data-v="Shy">Shy</button><button type="button" class="chip" data-g="pgExpr" data-v="Confident">Confident</button><button type="button" class="chip" data-g="pgExpr" data-v="Playful">Playful</button><button type="button" class="chip" data-g="pgExpr" data-v="Serious">Serious</button><button type="button" class="chip" data-g="pgExpr" data-v="Warm">Warm</button><button type="button" class="chip" data-g="pgExpr" data-v="Tired">Tired</button><button type="button" class="chip" data-g="pgExpr" data-v="Focused">Focused</button><button type="button" class="chip" data-g="pgExpr" data-v="Surprised">Surprised</button></div><p class="hint" style="margin-top:10px">OUTFIT</p><div id="pgOutfit"><button type="button" class="chip" data-g="pgOutfit" data-v="Casual modern">Casual modern</button><button type="button" class="chip" data-g="pgOutfit" data-v="Hoodie + jeans">Hoodie + jeans</button><button type="button" class="chip" data-g="pgOutfit" data-v="Business suit">Business suit</button><button type="button" class="chip" data-g="pgOutfit" data-v="Formal">Formal</button><button type="button" class="chip" data-g="pgOutfit" data-v="Tuxedo">Tuxedo</button><button type="button" class="chip" data-g="pgOutfit" data-v="Ballgown">Ballgown</button><button type="button" class="chip" data-g="pgOutfit" data-v="Summer dress">Summer dress</button><button type="button" class="chip" data-g="pgOutfit" data-v="Leather jacket">Leather jacket</button><button type="button" class="chip" data-g="pgOutfit" data-v="Sportswear">Sportswear</button><button type="button" class="chip" data-g="pgOutfit" data-v="Royal attire">Royal attire</button><button type="button" class="chip" data-g="pgOutfit" data-v="Medieval peasant">Medieval peasant</button><button type="button" class="chip" data-g="pgOutfit" data-v="Knight armor">Knight armor</button><button type="button" class="chip" data-g="pgOutfit" data-v="Wedding dress">Wedding dress</button><button type="button" class="chip" data-g="pgOutfit" data-v="Pajamas">Pajamas</button><button type="button" class="chip" data-g="pgOutfit" data-v="Bikini">Bikini</button><button type="button" class="chip" data-g="pgOutfit" data-v="Swimsuit">Swimsuit</button><button type="button" class="chip" data-g="pgOutfit" data-v="Sundress">Sundress</button><button type="button" class="chip" data-g="pgOutfit" data-v="Crop top + jeans">Crop top + jeans</button><button type="button" class="chip" data-g="pgOutfit" data-v="Oversized sweater">Oversized sweater</button><button type="button" class="chip" data-g="pgOutfit" data-v="Tank top + shorts">Tank top + shorts</button><button type="button" class="chip" data-g="pgOutfit" data-v="Blouse + skirt">Blouse + skirt</button><button type="button" class="chip" data-g="pgOutfit" data-v="Denim jacket">Denim jacket</button><button type="button" class="chip" data-g="pgOutfit" data-v="Evening gown">Evening gown</button><button type="button" class="chip" data-g="pgOutfit" data-v="Raincoat">Raincoat</button><button type="button" class="chip" data-g="pgOutfit" data-v="Coat + scarf">Coat + scarf</button><button type="button" class="chip" data-g="pgOutfit" data-v="Loungewear">Loungewear</button><button type="button" class="chip" data-g="pgOutfit" data-v="Athletic wear">Athletic wear</button></div><label>Clothing extra</label><input id="pgCloth" placeholder="navy linen shirt, worn denim"><p class="hint" style="margin-top:10px">LOCATION</p><div id="pgLoc"><button type="button" class="chip" data-g="pgLoc" data-v="City park">City park</button><button type="button" class="chip" data-g="pgLoc" data-v="City street night">City street night</button><button type="button" class="chip" data-g="pgLoc" data-v="Rooftop skyline">Rooftop skyline</button><button type="button" class="chip" data-g="pgLoc" data-v="Breakfast cafe">Breakfast cafe</button><button type="button" class="chip" data-g="pgLoc" data-v="Library">Library</button><button type="button" class="chip" data-g="pgLoc" data-v="Forest trail">Forest trail</button><button type="button" class="chip" data-g="pgLoc" data-v="Beach">Beach</button><button type="button" class="chip" data-g="pgLoc" data-v="On a train">On a train</button><button type="button" class="chip" data-g="pgLoc" data-v="Hotel lobby">Hotel lobby</button><button type="button" class="chip" data-g="pgLoc" data-v="Party">Party</button><button type="button" class="chip" data-g="pgLoc" data-v="Wedding">Wedding</button><button type="button" class="chip" data-g="pgLoc" data-v="Concert">Concert</button><button type="button" class="chip" data-g="pgLoc" data-v="Bookstore">Bookstore</button><button type="button" class="chip" data-g="pgLoc" data-v="Mountain overlook">Mountain overlook</button><button type="button" class="chip" data-g="pgLoc" data-v="Bedroom">Bedroom</button><button type="button" class="chip" data-g="pgLoc" data-v="Kitchen">Kitchen</button><button type="button" class="chip" data-g="pgLoc" data-v="Bathroom mirror">Bathroom mirror</button><button type="button" class="chip" data-g="pgLoc" data-v="Living room">Living room</button><button type="button" class="chip" data-g="pgLoc" data-v="Balcony">Balcony</button><button type="button" class="chip" data-g="pgLoc" data-v="Office">Office</button><button type="button" class="chip" data-g="pgLoc" data-v="Coffee shop window">Coffee shop window</button><button type="button" class="chip" data-g="pgLoc" data-v="Poolside">Poolside</button><button type="button" class="chip" data-g="pgLoc" data-v="Lakeside">Lakeside</button><button type="button" class="chip" data-g="pgLoc" data-v="Sunset field">Sunset field</button><button type="button" class="chip" data-g="pgLoc" data-v="Rainy street">Rainy street</button><button type="button" class="chip" data-g="pgLoc" data-v="Car interior">Car interior</button><button type="button" class="chip" data-g="pgLoc" data-v="Garden">Garden</button><button type="button" class="chip" data-g="pgLoc" data-v="Studio seamless backdrop">Studio seamless backdrop</button></div><p class="hint" style="margin-top:10px">QUALITY</p><div id="pgQual"><button type="button" class="chip" data-g="pgQual" data-v="Photorealistic">Photorealistic</button><button type="button" class="chip" data-g="pgQual" data-v="Natural pores">Natural pores</button><button type="button" class="chip" data-g="pgQual" data-v="Highly detailed">Highly detailed</button><button type="button" class="chip" data-g="pgQual" data-v="Natural proportions">Natural proportions</button><button type="button" class="chip" data-g="pgQual" data-v="Soft cinematic">Soft cinematic</button><button type="button" class="chip" data-g="pgQual" data-v="Sharp + shallow DoF">Sharp + shallow DoF</button><button type="button" class="chip" data-g="pgQual" data-v="Natural skin texture">Natural skin texture</button><button type="button" class="chip" data-g="pgQual" data-v="Soft daylight">Soft daylight</button><button type="button" class="chip" data-g="pgQual" data-v="Golden hour">Golden hour</button><button type="button" class="chip" data-g="pgQual" data-v="Overcast light">Overcast light</button><button type="button" class="chip" data-g="pgQual" data-v="Window light">Window light</button><button type="button" class="chip" data-g="pgQual" data-v="Even studio light">Even studio light</button><button type="button" class="chip" data-g="pgQual" data-v="Sharp focus on eyes">Sharp focus on eyes</button><button type="button" class="chip" data-g="pgQual" data-v="85mm portrait look">85mm portrait look</button><button type="button" class="chip" data-g="pgQual" data-v="Film still">Film still</button><button type="button" class="chip" data-g="pgQual" data-v="Matte realistic skin">Matte realistic skin</button><button type="button" class="chip" data-g="pgQual" data-v="Natural color">Natural color</button></div><label>Extra line</label><textarea id="pgExtra" rows="2"></textarea><label>Generated prompt</label><textarea id="pgOut" rows="4" readonly></textarea><div class="row"><button type="button" class="btn" id="btnCopyPrompt">Copy prompt</button></div></div></section><section id="p-selfie" class="panel"><div class="card">
+<section id="p-prompt" class="panel"><div class="card"><h2 style="margin:0 0 6px;font-size:1.15rem">Vignette</h2><p class="hint">One scene, written as prose. Copy it into the Kindroid selfie box. Cap 2000. Leave Look empty if the avatar already has the face. Every person in the scene is a grown adult.</p><label>Look <span class="lim" id="pgCount">0/2000</span></label><textarea id="pgLook" rows="2" placeholder="Optional. Tall adult, pale skin, short dark hair. Leave blank to use the Kindroid avatar."></textarea><label>What they are doing</label><input id="pgDoing" placeholder="sitting on a low stool, drawing a knife slowly over a whetstone"><label>Mood</label><input id="pgMood" placeholder="cold, careful, quiet"><p class="hint" style="margin-top:10px">SHOT</p><div id="pgShot"><button type="button" class="chip" data-g="pgShot" data-v="Candid selfie">Candid selfie</button><button type="button" class="chip" data-g="pgShot" data-v="Close-up">Close-up</button><button type="button" class="chip" data-g="pgShot" data-v="Selfie further away">Selfie further away</button><button type="button" class="chip" data-g="pgShot" data-v="Action shot">Action shot</button><button type="button" class="chip" data-g="pgShot" data-v="From above">From above</button><button type="button" class="chip" data-g="pgShot" data-v="Low angle">Low angle</button><button type="button" class="chip" data-g="pgShot" data-v="Wide group shot">Wide group shot</button><button type="button" class="chip" data-g="pgShot" data-v="Portrait">Portrait</button><button type="button" class="chip" data-g="pgShot" data-v="Shoulder-up portrait">Shoulder-up portrait</button><button type="button" class="chip" data-g="pgShot" data-v="Three-quarter view">Three-quarter view</button><button type="button" class="chip" data-g="pgShot" data-v="Full body">Full body</button><button type="button" class="chip" data-g="pgShot" data-v="Medium shot">Medium shot</button><button type="button" class="chip" data-g="pgShot" data-v="Mirror selfie">Mirror selfie</button><button type="button" class="chip" data-g="pgShot" data-v="Profile">Profile</button><button type="button" class="chip" data-g="pgShot" data-v="Cowboy shot">Cowboy shot</button><button type="button" class="chip" data-g="pgShot" data-v="Over-the-shoulder shot">Over-the-shoulder shot</button><button type="button" class="chip" data-g="pgShot" data-v="Establishing shot">Establishing shot</button></div><p class="hint" style="margin-top:10px">CAMERA</p><div id="pgAngle"><button type="button" class="chip" data-g="pgAngle" data-v="The camera is at eye level">Eye level</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera looks slightly down">Slightly above</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera looks down from above">High angle</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera is directly overhead">Bird's eye</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera is low, looking up">Low angle</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera is on the ground, looking up">Worm's eye</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera is at hip height">Hip height</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera is at a three-quarter angle">Three-quarter</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera is in profile">Profile</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera sits over the shoulder">Over the shoulder</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera is behind them">From behind</button><button type="button" class="chip" data-g="pgAngle" data-v="The camera is tilted">Dutch angle</button></div><p class="hint" style="margin-top:10px">POSE</p><div id="pgPose"><button type="button" class="chip" data-g="pgPose" data-v="Facing camera">Facing camera</button><button type="button" class="chip" data-g="pgPose" data-v="Looking down">Looking down</button><button type="button" class="chip" data-g="pgPose" data-v="Looking over shoulder">Looking over shoulder</button><button type="button" class="chip" data-g="pgPose" data-v="Walking toward camera">Walking toward camera</button><button type="button" class="chip" data-g="pgPose" data-v="Walking away (back to camera)">Walking away (back to camera)</button><button type="button" class="chip" data-g="pgPose" data-v="Facing away entirely">Facing away entirely</button><button type="button" class="chip" data-g="pgPose" data-v="Waving">Waving</button><button type="button" class="chip" data-g="pgPose" data-v="Raising a glass">Raising a glass</button><button type="button" class="chip" data-g="pgPose" data-v="Pointing into distance">Pointing into distance</button><button type="button" class="chip" data-g="pgPose" data-v="Holding hands">Holding hands</button><button type="button" class="chip" data-g="pgPose" data-v="Jumping mid-air">Jumping mid-air</button><button type="button" class="chip" data-g="pgPose" data-v="Sitting upright">Sitting upright</button><button type="button" class="chip" data-g="pgPose" data-v="Arms crossed">Arms crossed</button><button type="button" class="chip" data-g="pgPose" data-v="Power stance">Power stance</button><button type="button" class="chip" data-g="pgPose" data-v="Hands in pockets">Hands in pockets</button><button type="button" class="chip" data-g="pgPose" data-v="One hand in hair">One hand in hair</button><button type="button" class="chip" data-g="pgPose" data-v="Leaning on a railing">Leaning on a railing</button><button type="button" class="chip" data-g="pgPose" data-v="Sitting on steps">Sitting on steps</button><button type="button" class="chip" data-g="pgPose" data-v="Head tilt">Head tilt</button><button type="button" class="chip" data-g="pgPose" data-v="Chin down">Chin down</button><button type="button" class="chip" data-g="pgPose" data-v="Checking a phone">Checking a phone</button><button type="button" class="chip" data-g="pgPose" data-v="Crouching">Crouching</button><button type="button" class="chip" data-g="pgPose" data-v="Kneeling">Kneeling</button><button type="button" class="chip" data-g="pgPose" data-v="Weight on one hip">Weight on one hip</button><button type="button" class="chip" data-g="pgPose" data-v="Stretching">Stretching</button><button type="button" class="chip" data-g="pgPose" data-v="Looking off-camera">Looking off-camera</button></div><p class="hint" style="margin-top:10px">EXPRESSION</p><div id="pgExpr"><button type="button" class="chip" data-g="pgExpr" data-v="Happy">Happy</button><button type="button" class="chip" data-g="pgExpr" data-v="Knowing smile">Knowing smile</button><button type="button" class="chip" data-g="pgExpr" data-v="Smirking">Smirking</button><button type="button" class="chip" data-g="pgExpr" data-v="Laughing">Laughing</button><button type="button" class="chip" data-g="pgExpr" data-v="Sad">Sad</button><button type="button" class="chip" data-g="pgExpr" data-v="Crying">Crying</button><button type="button" class="chip" data-g="pgExpr" data-v="Shocked">Shocked</button><button type="button" class="chip" data-g="pgExpr" data-v="Angry">Angry</button><button type="button" class="chip" data-g="pgExpr" data-v="Jealous">Jealous</button><button type="button" class="chip" data-g="pgExpr" data-v="Rolling eyes">Rolling eyes</button><button type="button" class="chip" data-g="pgExpr" data-v="Calm">Calm</button><button type="button" class="chip" data-g="pgExpr" data-v="Thoughtful">Thoughtful</button><button type="button" class="chip" data-g="pgExpr" data-v="Neutral">Neutral</button><button type="button" class="chip" data-g="pgExpr" data-v="Soft smile">Soft smile</button><button type="button" class="chip" data-g="pgExpr" data-v="Closed-mouth smile">Closed-mouth smile</button><button type="button" class="chip" data-g="pgExpr" data-v="Grin">Grin</button><button type="button" class="chip" data-g="pgExpr" data-v="Shy">Shy</button><button type="button" class="chip" data-g="pgExpr" data-v="Confident">Confident</button><button type="button" class="chip" data-g="pgExpr" data-v="Playful">Playful</button><button type="button" class="chip" data-g="pgExpr" data-v="Serious">Serious</button><button type="button" class="chip" data-g="pgExpr" data-v="Warm">Warm</button><button type="button" class="chip" data-g="pgExpr" data-v="Tired">Tired</button><button type="button" class="chip" data-g="pgExpr" data-v="Focused">Focused</button><button type="button" class="chip" data-g="pgExpr" data-v="Surprised">Surprised</button></div><p class="hint" style="margin-top:10px">OUTFIT</p><div id="pgOutfit"><button type="button" class="chip" data-g="pgOutfit" data-v="Casual modern">Casual modern</button><button type="button" class="chip" data-g="pgOutfit" data-v="Hoodie + jeans">Hoodie + jeans</button><button type="button" class="chip" data-g="pgOutfit" data-v="Business suit">Business suit</button><button type="button" class="chip" data-g="pgOutfit" data-v="Formal">Formal</button><button type="button" class="chip" data-g="pgOutfit" data-v="Tuxedo">Tuxedo</button><button type="button" class="chip" data-g="pgOutfit" data-v="Ballgown">Ballgown</button><button type="button" class="chip" data-g="pgOutfit" data-v="Summer dress">Summer dress</button><button type="button" class="chip" data-g="pgOutfit" data-v="Leather jacket">Leather jacket</button><button type="button" class="chip" data-g="pgOutfit" data-v="Sportswear">Sportswear</button><button type="button" class="chip" data-g="pgOutfit" data-v="Royal attire">Royal attire</button><button type="button" class="chip" data-g="pgOutfit" data-v="Medieval peasant">Medieval peasant</button><button type="button" class="chip" data-g="pgOutfit" data-v="Knight armor">Knight armor</button><button type="button" class="chip" data-g="pgOutfit" data-v="Wedding dress">Wedding dress</button><button type="button" class="chip" data-g="pgOutfit" data-v="Pajamas">Pajamas</button><button type="button" class="chip" data-g="pgOutfit" data-v="Bikini">Bikini</button><button type="button" class="chip" data-g="pgOutfit" data-v="Swimsuit">Swimsuit</button><button type="button" class="chip" data-g="pgOutfit" data-v="Sundress">Sundress</button><button type="button" class="chip" data-g="pgOutfit" data-v="Crop top + jeans">Crop top + jeans</button><button type="button" class="chip" data-g="pgOutfit" data-v="Oversized sweater">Oversized sweater</button><button type="button" class="chip" data-g="pgOutfit" data-v="Tank top + shorts">Tank top + shorts</button><button type="button" class="chip" data-g="pgOutfit" data-v="Blouse + skirt">Blouse + skirt</button><button type="button" class="chip" data-g="pgOutfit" data-v="Denim jacket">Denim jacket</button><button type="button" class="chip" data-g="pgOutfit" data-v="Evening gown">Evening gown</button><button type="button" class="chip" data-g="pgOutfit" data-v="Raincoat">Raincoat</button><button type="button" class="chip" data-g="pgOutfit" data-v="Coat + scarf">Coat + scarf</button><button type="button" class="chip" data-g="pgOutfit" data-v="Loungewear">Loungewear</button><button type="button" class="chip" data-g="pgOutfit" data-v="Athletic wear">Athletic wear</button></div><label>Clothing extra</label><input id="pgCloth" placeholder="navy linen shirt, worn denim"><p class="hint" style="margin-top:10px">LOCATION</p><div id="pgLoc"><button type="button" class="chip" data-g="pgLoc" data-v="City park">City park</button><button type="button" class="chip" data-g="pgLoc" data-v="City street night">City street night</button><button type="button" class="chip" data-g="pgLoc" data-v="Rooftop skyline">Rooftop skyline</button><button type="button" class="chip" data-g="pgLoc" data-v="Breakfast cafe">Breakfast cafe</button><button type="button" class="chip" data-g="pgLoc" data-v="Library">Library</button><button type="button" class="chip" data-g="pgLoc" data-v="Forest trail">Forest trail</button><button type="button" class="chip" data-g="pgLoc" data-v="Beach">Beach</button><button type="button" class="chip" data-g="pgLoc" data-v="On a train">On a train</button><button type="button" class="chip" data-g="pgLoc" data-v="Hotel lobby">Hotel lobby</button><button type="button" class="chip" data-g="pgLoc" data-v="Party">Party</button><button type="button" class="chip" data-g="pgLoc" data-v="Wedding">Wedding</button><button type="button" class="chip" data-g="pgLoc" data-v="Concert">Concert</button><button type="button" class="chip" data-g="pgLoc" data-v="Bookstore">Bookstore</button><button type="button" class="chip" data-g="pgLoc" data-v="Mountain overlook">Mountain overlook</button><button type="button" class="chip" data-g="pgLoc" data-v="Bedroom">Bedroom</button><button type="button" class="chip" data-g="pgLoc" data-v="Kitchen">Kitchen</button><button type="button" class="chip" data-g="pgLoc" data-v="Bathroom mirror">Bathroom mirror</button><button type="button" class="chip" data-g="pgLoc" data-v="Living room">Living room</button><button type="button" class="chip" data-g="pgLoc" data-v="Balcony">Balcony</button><button type="button" class="chip" data-g="pgLoc" data-v="Office">Office</button><button type="button" class="chip" data-g="pgLoc" data-v="Coffee shop window">Coffee shop window</button><button type="button" class="chip" data-g="pgLoc" data-v="Poolside">Poolside</button><button type="button" class="chip" data-g="pgLoc" data-v="Lakeside">Lakeside</button><button type="button" class="chip" data-g="pgLoc" data-v="Sunset field">Sunset field</button><button type="button" class="chip" data-g="pgLoc" data-v="Rainy street">Rainy street</button><button type="button" class="chip" data-g="pgLoc" data-v="Car interior">Car interior</button><button type="button" class="chip" data-g="pgLoc" data-v="Garden">Garden</button><button type="button" class="chip" data-g="pgLoc" data-v="Studio seamless backdrop">Studio seamless backdrop</button></div><p class="hint" style="margin-top:10px">QUALITY</p><div id="pgQual"><button type="button" class="chip" data-g="pgQual" data-v="Photorealistic">Photorealistic</button><button type="button" class="chip" data-g="pgQual" data-v="Natural pores">Natural pores</button><button type="button" class="chip" data-g="pgQual" data-v="Highly detailed">Highly detailed</button><button type="button" class="chip" data-g="pgQual" data-v="Natural proportions">Natural proportions</button><button type="button" class="chip" data-g="pgQual" data-v="Soft cinematic">Soft cinematic</button><button type="button" class="chip" data-g="pgQual" data-v="Sharp + shallow DoF">Sharp + shallow DoF</button><button type="button" class="chip" data-g="pgQual" data-v="Natural skin texture">Natural skin texture</button><button type="button" class="chip" data-g="pgQual" data-v="Soft daylight">Soft daylight</button><button type="button" class="chip" data-g="pgQual" data-v="Golden hour">Golden hour</button><button type="button" class="chip" data-g="pgQual" data-v="Overcast light">Overcast light</button><button type="button" class="chip" data-g="pgQual" data-v="Window light">Window light</button><button type="button" class="chip" data-g="pgQual" data-v="Even studio light">Even studio light</button><button type="button" class="chip" data-g="pgQual" data-v="Sharp focus on eyes">Sharp focus on eyes</button><button type="button" class="chip" data-g="pgQual" data-v="85mm portrait look">85mm portrait look</button><button type="button" class="chip" data-g="pgQual" data-v="Film still">Film still</button><button type="button" class="chip" data-g="pgQual" data-v="Matte realistic skin">Matte realistic skin</button><button type="button" class="chip" data-g="pgQual" data-v="Natural color">Natural color</button></div><label>Extra line</label><textarea id="pgExtra" rows="2"></textarea><label>Generated vignette</label><textarea id="pgOut" rows="6" readonly></textarea><div class="row"><button type="button" class="btn" id="btnCopyPrompt">Copy vignette</button></div></div></section><section id="p-selfie" class="panel"><div class="card">
 <h2 style="margin:0 0 6px;font-size:1.15rem">Still → video (V4)</h2>
 <p class="hint">Generate the still in Kindroid first. Paste this line into Video. V4 has opinions: if you name a prop that is not in the first frame, it may create it.</p>
 <p class="hint"><strong>Anchor the still.</strong> Only name objects already in it.<br>
@@ -701,6 +761,40 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
 </div>
 </section>
 
+<section id="p-games" class="panel">
+  <div class="card">
+    <h2 style="margin:0 0 6px;font-size:1.15rem">Games</h2>
+    <p class="hint gm-notice" id="gmNotice">Heads up: game turns go through the Kindroid API, so they also show up in this Kin's real Kindroid chat and memory.</p>
+    <label for="gmChar">Play against</label>
+    <div class="row" style="align-items:center">
+      <select id="gmChar" style="flex:3 1 200px;margin:0"></select>
+      <label class="hint" style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="gmVoice" checked style="width:auto;margin:0"> Speak replies</label>
+    </div>
+    <p class="hint" id="gmCharHint" style="margin-top:6px"></p>
+    <div class="gm-picker" id="gmPicker">
+      <button type="button" class="gm-pick" data-game="trivia">Sword of Truth trivia<small>Multiple choice from the books</small></button>
+      <button type="button" class="gm-pick" data-game="twenty">20 Questions<small>Kin thinks, or you think</small></button>
+      <button type="button" class="gm-pick" data-game="chess">Chess<small>Full rules, you vs your Kin</small></button>
+      <button type="button" class="gm-pick" data-game="ttt">Tic-tac-toe<small>Three in a row</small></button>
+      <button type="button" class="gm-pick" data-game="c4">Connect Four<small>Four in a row</small></button>
+      <button type="button" class="gm-pick" data-game="story">Story adventure<small>Your Kin is game master</small></button>
+      <button type="button" class="gm-pick" data-game="wyr">Would You Rather<small>Pick, compare, explain</small></button>
+    </div>
+  </div>
+  <div class="card" id="gmStage" hidden>
+    <div class="gm-head"><strong id="gmTitle">Game</strong><span class="gm-score" id="gmScore"></span></div>
+    <div id="gmArea"></div>
+    <div class="chat-log gm-log" id="gmLog" aria-live="polite"></div>
+    <p class="typing" id="gmStatus" role="status" aria-live="polite"></p>
+    <div class="row">
+      <button type="button" class="btn secondary" id="gmRetry" hidden>Retry</button>
+      <button type="button" class="btn secondary" id="gmReplay">Replay</button>
+      <button type="button" class="btn secondary" id="gmStopVoice">Stop voice</button>
+      <button type="button" class="btn danger" id="gmEnd">End game</button>
+    </div>
+  </div>
+</section>
+
 </main>
 <div id="histSheet" class="sheet" hidden>
   <div class="sheet-card" role="dialog" aria-labelledby="histSheetTitle">
@@ -727,7 +821,23 @@ body.dyslexic,body.dyslexic button,body.dyslexic input,body.dyslexic textarea,bo
 <script>
 const API = 'https://api.kindroid.ai/v1';
 const $ = id => document.getElementById(id);
+function isWindowsApp(){
+  try{
+    if(window.KinDesktop && window.KinDesktop.platform==='windows') return true;
+  }catch(_){}
+  try{
+    if(window.KinNative===true && isWindows()) return true;
+  }catch(_){}
+  return false;
+}
+function isAndroidApp(){
+  try{
+    var n=window.KinNative;
+    return !!(n && typeof n==='object' && (n.platform==='android' || typeof n.startSpeech==='function'));
+  }catch(_){ return false; }
+}
 function isIOS(){
+  if(isWindowsApp()) return false;
   const ua=navigator.userAgent||'';
   return /iPhone|iPad|iPod/i.test(ua) || (navigator.platform==='MacIntel' && (navigator.maxTouchPoints||0)>1);
 }
@@ -745,6 +855,53 @@ function isWindows(){
   }catch(_){}
   return /Windows|Win64|WOW64/i.test(navigator.userAgent||'');
 }
+function startDownload(url){
+  var frame=document.createElement('iframe');
+  frame.hidden=true;
+  frame.setAttribute('aria-hidden','true');
+  frame.style.cssText='position:absolute;width:0;height:0;border:0';
+  frame.src=url+(url.indexOf('?')>=0?'&':'?')+'dl='+Date.now();
+  document.body.appendChild(frame);
+  setTimeout(function(){ try{ frame.remove(); }catch(_){} }, 180000);
+}
+function bindInstallButtons(){
+  var android=$('btnAndroidDl'), win=$('btnWinInstall'), ios=$('btnIosInstall'), winFile=$('btnWinFile');
+  if(android && !android.dataset.dl){
+    android.dataset.dl='1';
+    android.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      var iosSheet=$('iosSheet'); if(iosSheet) iosSheet.hidden=true;
+      startDownload('/downloads/Kin-Studio.apk');
+      try{ liveToast('Downloading the Android app…'); }catch(_){}
+    });
+  }
+  if(win && !win.dataset.dl){
+    win.dataset.dl='1';
+    win.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      var iosSheet=$('iosSheet'); if(iosSheet) iosSheet.hidden=true;
+      var sh=$('winSheet'); if(sh) sh.hidden=false;
+      startDownload('/downloads/Kin-Studio.exe');
+      try{ liveToast('Downloading Kin-Studio.exe…'); }catch(_){}
+    });
+  }
+  if(winFile && !winFile.dataset.dl){
+    winFile.dataset.dl='1';
+    winFile.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      startDownload('/downloads/Kin-Studio.exe');
+      try{ liveToast('Downloading Kin-Studio.exe…'); }catch(_){}
+    });
+  }
+  if(ios && !ios.dataset.dl){
+    ios.dataset.dl='1';
+    ios.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      var sh=$('winSheet'); if(sh) sh.hidden=true;
+    });
+  }
+}
+bindInstallButtons();
 let winInstallPrompt=null;
 window.addEventListener('beforeinstallprompt', function(e){
   e.preventDefault();
@@ -784,8 +941,63 @@ function normalizeKey(raw){
   return s;
 }
 function keyLooksGood(k){ return /^kn_[A-Za-z0-9_-]{8,}$/.test(normalizeKey(k||'')); }
-function lsGet(k){ try{ return localStorage.getItem(k); }catch{return null;} }
-function lsSet(k,v){ try{ localStorage.setItem(k,v); return true; }catch{ try{ sessionStorage.setItem(k,v); return true; }catch{return false;} } }
+function diskBridge(){
+  try{
+    var d=window.KinDisk;
+    if(d && typeof d.keys==='function' && typeof d.read==='function' && typeof d.begin==='function') return d;
+  }catch(_){}
+  return null;
+}
+function diskWrite(key, text){
+  text=String(text);
+  var step=400000;
+  if(!kinDisk.begin(key)) return false;
+  for(var i=0;i<text.length;i+=step){
+    if(!kinDisk.append(key, text.slice(i, i+step))) return false;
+  }
+  return !!kinDisk.end(key);
+}
+function diskReadMap(){
+  var keys=kinDisk.keys();
+  if(typeof keys==='string'){ try{ keys=JSON.parse(keys||'[]'); }catch(_){ keys=[]; } }
+  var out={}, step=400000;
+  (keys||[]).forEach(function(k){
+    var n=Number(kinDisk.length(k))||0;
+    var s='';
+    for(var i=0;i<n;i+=step) s+=String(kinDisk.read(k, i, step)||'');
+    out[k]=s;
+  });
+  return out;
+}
+var kinDisk=diskBridge();
+var diskCache=null;
+if(kinDisk){
+  diskCache={};
+  try{ diskCache=diskReadMap()||{}; }catch(_){ diskCache={}; }
+  if(!Object.keys(diskCache).length){
+    try{
+      for(var di=0; di<localStorage.length; di++){
+        var dk=localStorage.key(di);
+        if(!dk) continue;
+        var dv=localStorage.getItem(dk);
+        if(dv==null) continue;
+        diskCache[dk]=dv;
+        try{ diskWrite(dk, dv); }catch(_){}
+      }
+    }catch(_){}
+  }
+}
+function lsGet(k){
+  if(diskCache) return Object.prototype.hasOwnProperty.call(diskCache, k) ? diskCache[k] : null;
+  try{ return localStorage.getItem(k); }catch{return null;}
+}
+function lsSet(k,v){
+  if(diskCache){
+    diskCache[k]=String(v);
+    try{ return diskWrite(k, String(v)); }catch(_){ return false; }
+  }
+  try{ localStorage.setItem(k,v); return true; }catch{ try{ sessionStorage.setItem(k,v); return true; }catch{return false;} }
+}
 function readApiKey(){
   const fromInput=normalizeKey($('apiKey')&&$('apiKey').value);
   if(keyLooksGood(fromInput)){ memoryKey=fromInput; return fromInput; }
@@ -1230,10 +1442,10 @@ function wireLivePreview(){
   if ($('btnStopPreview')) $('btnStopPreview').onclick=()=>{ stopSpeaking(); if($('vStatus')) $('vStatus').textContent='Stopped.'; };
 }
 
-const CHAR_LIMS=[['cTag','lim-tag',100],['cBio','lim-bio',200],['cAppearance','lim-app',800],['cDescTableau','lim-tab',800],
-    ['cFace','lim-face',200],['cPersonality','lim-per',2500],['cGreet','lim-greet',750],['cMem','lim-mem',1000],
+const CHAR_LIMS=[['cTag','lim-tag',100],['cBio','lim-bio',200],['cAppearance','lim-app',800],['cDescTableau','lim-tab',800],['cAvatarGen','lim-agen',200],
+    ['cFace','lim-face',200],['cVoiceDesc','lim-vdesc',1000],['cPersonality','lim-per',2500],['cGreet','lim-greet',750],['cMem','lim-mem',1000],
     ['cGrowth','lim-grow',800],['cFacts','lim-facts',1200],['cThreads','lim-threads',800],['cDir','lim-dir',250],
-    ['cExample','lim-ex',750],['cAdditional','lim-add',2500],['cScene','lim-scene',160],['cNotes','lim-notes',1000],['avBody','lim-avbody',150]];
+    ['cExample','lim-ex',750],['cAdditional','lim-add',2500]];
 function paintCharLimits(){
   CHAR_LIMS.forEach(([id,lim,max])=>{
     const el=$(id), L=$(lim); if(!el||!L) return;
@@ -1249,23 +1461,6 @@ function bindCharLimits(){
   });
   paintCharLimits();
 }
-function applyKinPlan(){
-  var plan=($('kinPlan')&&$('kinPlan').value)==='max'?'max':'ultra';
-  try{ localStorage.setItem('ks_kin_plan', plan); }catch(_){}
-  var add=plan==='max'?5000:2500;
-  var back=plan==='max'?2000:1000;
-  CHAR_LIMS.forEach(function(row){ if(row[0]==='cAdditional') row[2]=add; });
-  PERSONA_LIMS.forEach(function(row){ if(row[0]==='peBackstory') row[2]=back; });
-  if($('cAdditional')) $('cAdditional').maxLength=add;
-  if($('peBackstory')) $('peBackstory').maxLength=back;
-  paintCharLimits();
-  if(typeof paintPersonaLimits==='function') paintPersonaLimits();
-}
-try{
-  var savedPlan=localStorage.getItem('ks_kin_plan');
-  if($('kinPlan')&&(savedPlan==='max'||savedPlan==='ultra')) $('kinPlan').value=savedPlan;
-}catch(_){}
-if($('kinPlan')) $('kinPlan').onchange=applyKinPlan;
 
 const PERSONA_LIMS=[['peBackstory','lim-peBack',1000],['peAppearance','lim-peApp',800],['peFace','lim-peFace',200]];
 function paintPersonaLimits(){
@@ -1274,7 +1469,6 @@ function paintPersonaLimits(){
     L.textContent=(el.value||'').length+'/'+max;
   });
 }
-applyKinPlan();
 function bindPersonaLimits(){
   PERSONA_LIMS.forEach(([id])=>{
     const el=$(id); if(!el || el.dataset.limBound) return;
@@ -1440,10 +1634,12 @@ function charFromForm(){
     characterLink:($('cCharacterLink') ? $('cCharacterLink').value : '').trim(),
     shareLink:($('cCharacterLink') ? $('cCharacterLink').value : '').trim(),
     selfieTemplate:$('cSelfie').value||'',
+    avatarGenerator:($('cAvatarGen')&&$('cAvatarGen').value)||'',
     appearance:$('cAppearance').value||'',
     descAtelier:$('cAppearance').value||'',
     descTableau:$('cDescTableau').value||'',
     face:$('cFace').value||'',
+    voiceDescription:($('cVoiceDesc')&&$('cVoiceDesc').value)||'',
     personality:$('cPersonality').value||'',
     greeting:$('cGreet').value||'',
     keyMemories:$('cMem').value||'',
@@ -1454,14 +1650,6 @@ function charFromForm(){
     directive:$('cDir').value||'',
     example:$('cExample').value||'',
     additional:$('cAdditional').value||'',
-    currentScene:($('cScene')&&$('cScene').value)||'',
-    authorNotes:($('cNotes')&&$('cNotes').value)||'',
-    flair:($('cFlair')&&$('cFlair').value)||'',
-    avatarBody:($('avBody')&&$('avBody').value)||'',
-    avatarFace:($('avFace')&&$('avFace').value)||'',
-    avatarExt:($('avExt')&&$('avExt').value)||'1.6',
-    avatarLook:($('avLook')&&$('avLook').value)||'',
-    avatarNote:($('avNote')&&$('avNote').value)||'',
     avatar: ($('cAvatar') && $('cAvatar').value) || '',
     build:[$('cPersonality').value,$('cGrowth').value,$('cFacts').value,$('cThreads').value,$('cAdditional').value].filter(Boolean).join('\n\n')
   };
@@ -1479,9 +1667,11 @@ function loadCharForm(c){
   if ($('cShareCode')) $('cShareCode').value=c.shareCode||'';
   if ($('cCharacterLink')) $('cCharacterLink').value=c.characterLink||c.shareLink||'';
   $('cSelfie').value=c.selfieTemplate||'';
+  if($('cAvatarGen')) $('cAvatarGen').value=c.avatarGenerator||'';
   $('cAppearance').value=c.appearance||c.descAtelier||'';
   $('cDescTableau').value=c.descTableau||'';
   $('cFace').value=c.face||'';
+  if($('cVoiceDesc')) $('cVoiceDesc').value=c.voiceDescription||'';
   $('cPersonality').value=c.personality||c.build||'';
   $('cGreet').value=c.greeting||'';
   $('cMem').value=c.keyMemories||c.memories||c.key_memories||'';
@@ -1491,14 +1681,6 @@ function loadCharForm(c){
   $('cDir').value=c.directive||'';
   $('cExample').value=c.example||'';
   $('cAdditional').value=c.additional||'';
-  if($('cScene')) $('cScene').value=c.currentScene||c.current_scene||'';
-  if($('cNotes')) $('cNotes').value=c.authorNotes||c.author_notes||'';
-  if($('cFlair')) $('cFlair').value=c.flair||'';
-  if($('avBody')) $('avBody').value=c.avatarBody||'';
-  if($('avFace')) $('avFace').value=c.avatarFace||'';
-  if($('avExt')) $('avExt').value=c.avatarExt||'1.6';
-  if($('avLook')) $('avLook').value=c.avatarLook||'';
-  if($('avNote')) $('avNote').value=c.avatarNote||'';
   if($('cAvatar')) $('cAvatar').value=c.avatar||'';
   if(typeof paintCharPhoto==='function') paintCharPhoto();
   bindCharLimits();
@@ -1516,10 +1698,12 @@ function mapRawToChar(raw, voiceId){
     characterLink: raw.characterLink||raw.shareLink||'',
     shareLink: raw.characterLink||raw.shareLink||'',
     selfieTemplate: raw.selfieTemplate||'',
+    avatarGenerator: raw.avatarGenerator||'',
     appearance: raw.appearance||raw.descAtelier||'',
     descAtelier: raw.descAtelier||raw.appearance||'',
     descTableau: raw.descTableau||'',
     face: raw.face||'',
+    voiceDescription: raw.voiceDescription||'',
     personality: raw.personality||'',
     greeting: raw.greeting||'',
     keyMemories: raw.keyMemories||raw.memories||'',
@@ -1530,14 +1714,6 @@ function mapRawToChar(raw, voiceId){
     directive: raw.directive||'',
     example: raw.example||'',
     additional: raw.additional||'',
-    currentScene: raw.currentScene||raw.current_scene||'',
-    authorNotes: raw.authorNotes||raw.author_notes||'',
-    flair: raw.flair||'',
-    avatarBody: raw.avatarBody||'',
-    avatarFace: raw.avatarFace||'',
-    avatarExt: raw.avatarExt||'1.6',
-    avatarLook: raw.avatarLook||'',
-    avatarNote: raw.avatarNote||'',
     avatar: (typeof raw.avatar==='string' && raw.avatar.indexOf('data:image')===0) ? raw.avatar : '',
     build: raw.build||[raw.personality,raw.growth,raw.importantFacts,raw.ongoingThreads,raw.additional].filter(Boolean).join('\n\n')
   };
@@ -1815,6 +1991,10 @@ async function apiGet(path){
 
 const PULL_DAY_CAP=600;
 const HIST_LS=400;
+function clipHist(list){
+  list=list||[];
+  return diskCache ? list : list.slice(-HIST_LS);
+}
 const HIST_SHOW=350;
 let histAbort=false, histBusy=false, histKind='ai';
 const threadCache={};
@@ -1855,6 +2035,13 @@ function histOpen(){
 async function histGet(key){
   if(threadCache[key] && threadCache[key].messages) return threadCache[key];
   const empty={ key:key, messages:[], cursor:null, complete:false };
+  if(diskCache){
+    const onDisk=store.get('hist_'+key, null);
+    if(onDisk && Array.isArray(onDisk.messages) && onDisk.messages.length){
+      threadCache[key]=onDisk;
+      return onDisk;
+    }
+  }
   try{
     const db=await histOpen();
     if(db){
@@ -1864,7 +2051,13 @@ async function histGet(key){
         q.onsuccess=function(){ res(q.result||null); };
         q.onerror=function(){ res(null); };
       });
-      if(rec && Array.isArray(rec.messages)){ threadCache[key]=rec; return rec; }
+      if(rec && Array.isArray(rec.messages)){
+        threadCache[key]=rec;
+        if(diskCache){
+          try{ store.set('hist_'+key, { key:key, cursor:rec.cursor||null, complete:!!rec.complete, messages:rec.messages }); }catch(_){}
+        }
+        return rec;
+      }
     }
   }catch(_){}
   const ls=store.get('hist_'+key, null);
@@ -1876,8 +2069,9 @@ async function histPut(row){
   if(!row || !row.key) return;
   threadCache[row.key]=row;
   try{
-    store.set('hist_'+row.key, { key:row.key, cursor:row.cursor, complete:!!row.complete, messages:(row.messages||[]).slice(-HIST_LS) });
+    store.set('hist_'+row.key, { key:row.key, cursor:row.cursor, complete:!!row.complete, messages:clipHist(row.messages||[]) });
   }catch(_){}
+  if(diskCache) return;
   try{
     const db=await histOpen();
     if(!db) return;
@@ -1968,11 +2162,11 @@ function applyThreadToUi(target, row, opts){
   opts=opts||{};
   const list=row&&row.messages||[];
   if(target.kind==='ai' && target.charId){
-    store.set('chatHist_'+target.charId, list.slice(-HIST_LS).map(function(m){ return { role:m.role, text:m.text, t:m.t, images:m.images||[] }; }));
+    store.set('chatHist_'+target.charId, clipHist(list).map(function(m){ return { role:m.role, text:m.text, t:m.t, images:m.images||[] }; }));
     const c=chars().find(function(x){ return x.id===target.charId; });
     renderChatHistory(c, { all:list, showAll:!!opts.showAll });
   } else if(target.kind==='group'){
-    store.set('chatHist_'+threadKey('group', target.id), list.slice(-HIST_LS));
+    store.set('chatHist_'+threadKey('group', target.id), clipHist(list));
     renderGroupHistory(list, { showAll:!!opts.showAll });
   }
 }
@@ -2356,7 +2550,9 @@ if($('btnGenerateVoice')) $('btnGenerateVoice').onclick=()=>{
 if($('btnDesign')) $('btnDesign').onclick=()=>{ if($('btnGenerateVoice')) $('btnGenerateVoice').click(); };
 
 if($('btnTestVoice')) $('btnTestVoice').onclick=async()=>{ try{ await speakText(currentVoiceDraft().description||'Hello.', currentVoiceDraft()); $('vStatus').textContent='Played.'; }catch(e){ $('vStatus').innerHTML='<span class="error">'+esc(e.message)+'</span>'; }};
-if($('btnStopVoice')) $('btnStopVoice').onclick=()=>{ stopSpeaking(); if($('vStatus')) $('vStatus').textContent='Stopped.'; };
+if($('btnStopVoice')) $('btnStopVoice').onclick=stopVoicePreview;
+if($('btnStopVoice2')) $('btnStopVoice2').onclick=stopVoicePreview;
+function stopVoicePreview(){ stopSpeaking(); if($('vStatus')) $('vStatus').textContent='Stopped.'; }
 if($('btnSaveVoice')) $('btnSaveVoice').onclick=()=>{ const v=currentVoiceDraft(); const list=voices(); const i=list.findIndex(x=>x.id===v.id); if(i>=0)list[i]=v; else list.push(v); saveVoices(list); $('vId').value=v.id; $('vStatus').textContent='Saved.'; renderVoices(); refreshSelects(); };
 if($('btnApplyMix')) $('btnApplyMix').onclick=()=>{ applyMixToSliders(); scheduleLivePreview(true); $('vStatus').textContent='Mix applied — Test or Save this mix.'; };
 if($('btnSaveMix')) $('btnSaveMix').onclick=()=>{
@@ -2385,7 +2581,7 @@ if($('btnSaveChar')) $('btnSaveChar').onclick=()=>doSaveChar(false);
 if($('btnSaveCharBottom')) $('btnSaveCharBottom').onclick=()=>doSaveChar(false);
 if($('cName')){ ['input','change','blur','paste'].forEach(ev=>$('cName').addEventListener(ev, scheduleCharSave)); }
 if($('cAiId')){ ['input','change','blur','paste'].forEach(ev=>$('cAiId').addEventListener(ev, scheduleCharSave)); }
-if($('btnNewChar')) $('btnNewChar').onclick=()=>{ $('cId').value=''; loadCharForm({name:'',ai_id:'',voice_id:'',tag:'',bio:'',shareCode:'',characterLink:'',shareLink:'',selfieTemplate:'',appearance:'',descTableau:'',face:'',personality:'',greeting:'',keyMemories:'',growth:'',importantFacts:'','ongoingThreads':'','directive':'','example':'','additional':''}); $('cStatus').textContent=''; paintCharLimits(); };
+if($('btnNewChar')) $('btnNewChar').onclick=()=>{ $('cId').value=''; loadCharForm({name:'',ai_id:'',voice_id:'',tag:'',bio:'',shareCode:'',characterLink:'',shareLink:'',selfieTemplate:'',avatarGenerator:'',appearance:'',descTableau:'',face:'',voiceDescription:'',personality:'',greeting:'',keyMemories:'',growth:'',importantFacts:'','ongoingThreads':'','directive':'','example':'','additional':''}); $('cStatus').textContent=''; paintCharLimits(); };
 
 function showExportBox(filename, json){
   let box=$('exportBox');
@@ -2490,7 +2686,7 @@ function persistChat(cId, role, text, extra){
   const hist=store.get(key, []);
   const row={ role: role, text: text, t: (extra&&extra.t)||Date.now(), images:(extra&&extra.images)||[] };
   hist.push(row);
-  store.set(key, hist.slice(-HIST_LS));
+  store.set(key, clipHist(hist));
   const c=chars().find(function(x){ return x.id===cId; });
   if(c && c.ai_id){
     mergeAndSave({ kind:'ai', id:c.ai_id, charId:c.id, name:c.name }, [{ role:row.role, text:row.text, t:row.t, images:row.images, who:c.name||'', id:'' }], { silent:true });
@@ -2719,10 +2915,12 @@ function startMic(target){
   if(!SR){
     const box=micMsgEl();
     if(box){ box.focus(); }
-    if(status) status.textContent=isIOS()
+    if(status) status.textContent=isWindowsApp()||isWindows()
+      ? 'Type your line. This Windows app has no iPhone keyboard.'
+      : (isIOS()
       ? 'Tap the mic on the iPhone keyboard to dictate, then Send'
-      : 'Voice typing is not on this phone — type instead.';
-    liveToast(isIOS() ? 'Use the dictation key on the keyboard' : 'Type your line');
+      : 'Voice typing is not on this phone — type instead.');
+    liveToast(isWindowsApp()||isWindows() ? 'Type your line' : (isIOS() ? 'Use the dictation key on the keyboard' : 'Type your line'));
     return;
   }
   startWebkitMic();
@@ -2789,7 +2987,7 @@ function bindMicButton(btn, target){
   }
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){
-    btn.title=isIOS()?'Dictate with iPhone keyboard':'Type instead';
+    btn.title=isWindowsApp()||isWindows()?'Type your line':(isIOS()?'Dictate with iPhone keyboard':'Type instead');
     btn.setAttribute('aria-label', btn.title);
     btn.onclick=function(){ startMic(target); };
     return;
@@ -2985,81 +3183,42 @@ function selectedChips(gid, multi){
   const on=[...document.querySelectorAll('#'+gid+' .chip.on')].map(b=>b.dataset.v);
   return on;
 }
-function composeAvatarLine(){
-  function clean(s){ return String(s||'').replace(/\bno-sys\b/gi,' ').replace(/\s+/g,' ').trim(); }
-  var body=clean($('avBody')&&$('avBody').value).slice(0,150);
-  var face=clean($('avFace')&&$('avFace').value).replace(/[<>]/g,'');
-  var ext=parseFloat($('avExt')&&$('avExt').value);
-  if(!isFinite(ext)) ext=1.6;
-  ext=Math.round(Math.min(3, Math.max(1.1, ext))*10)/10;
-  if($('avExt')) $('avExt').value=ext.toFixed(1);
-  if($('lim-avext')) $('lim-avext').textContent=ext.toFixed(1);
-  var look=clean($('avLook')&&$('avLook').value);
-  var note=clean($('avNote')&&$('avNote').value);
-  var cut=look.indexOf('///');
-  if(cut>=0){
-    if(!note) note=clean(look.slice(cut+3));
-    look=clean(look.slice(0,cut));
-  }
-  var parts=[];
-  if(body) parts.push('[body: '+body+']');
-  if(face) parts.push('<'+face+'>');
-  parts.push('<(ext:'+ext.toFixed(1)+')>');
-  if(look) parts.push(look);
-  var line=parts.join(' ');
-  if(note) line+=' /// '+note;
-  var warn=[];
-  if(face && /\b(shirt|dress|pants|skirt|pose|hands|holding|standing|sitting|clothes|clothing|style)\b/i.test(face)){
-    warn.push('Face brackets should stay on the face.');
-  }
-  if(line.length>800) warn.push('Atelier box holds 800 characters. This line is longer.');
-  if($('avNotationStatus')) $('avNotationStatus').textContent=warn.join(' ');
-  return line;
-}
-function writeAvatarLine(){
-  var line=composeAvatarLine();
-  if($('cAppearance')) $('cAppearance').value=line;
-  if(typeof paintCharLimits==='function') paintCharLimits();
-  if(typeof scheduleCharSave==='function') scheduleCharSave();
-  return line;
-}
-if($('btnWriteAvatar')) $('btnWriteAvatar').onclick=function(){
-  var line=writeAvatarLine();
-  if(typeof liveToast==='function') liveToast('Wrote avatar description');
-  else if(typeof toast==='function') toast('Wrote avatar description');
-  if($('avNotationStatus') && !$('avNotationStatus').textContent) $('avNotationStatus').textContent=line;
-};
-if($('btnCopyAvatarLine')) $('btnCopyAvatarLine').onclick=function(){
-  var line=composeAvatarLine();
-  if(typeof copyOut==='function') copyOut(line, 'Copied avatar line');
-  else if(navigator.clipboard) navigator.clipboard.writeText(line);
-};
-['avBody','avFace','avLook','avNote','avExt'].forEach(function(id){
-  var el=$(id); if(!el) return;
-  el.addEventListener('input', function(){ composeAvatarLine(); if(id!=='avExt') paintCharLimits(); });
-});
-
 function buildPrompt(){
-  const shot=(selectedChips('pgShot')[0]||'Candid selfie');
-  const pose=selectedChips('pgPose').join(', ');
-  const expr=selectedChips('pgExpr').join(', ');
-  const outf=selectedChips('pgOutfit').join(', ') || 'casual clothing';
-  const loc=selectedChips('pgLoc').join(', ');
-  const qual=selectedChips('pgQual').join(', ') || 'Photorealistic';
+  const shot=(selectedChips('pgShot')[0]||'');
+  const angle=(selectedChips('pgAngle')[0]||'');
+  const pose=selectedChips('pgPose');
+  const expr=selectedChips('pgExpr');
+  const outfit=selectedChips('pgOutfit');
+  const loc=selectedChips('pgLoc');
+  const qual=selectedChips('pgQual');
   const cloth=($('pgCloth')&&$('pgCloth').value||'').trim();
   const extra=($('pgExtra')&&$('pgExtra').value||'').trim();
-  let s=shot+' of the subject.';
-  if(pose) s+=' '+pose+'.';
-  if(expr) s+=' '+expr+'.';
-  s+=' '+(cloth||outf)+'.';
-  if(loc) s+=' '+loc+'.';
-  s+=' '+qual+'.';
-  if(extra) s+=' '+extra.replace(/\bno-sys\b/gi,' ');
-  if($('pgOut')) $('pgOut').value=s.replace(/\s+/g,' ').trim();
+  const doing=($('pgDoing')&&$('pgDoing').value||'').trim();
+  const mood=($('pgMood')&&$('pgMood').value||'').trim();
+  const look=($('pgLook')&&$('pgLook').value||'').trim();
+  const style=(qual.length?qual.join(', '):'Photorealistic');
+  const who=look ? ('A grown adult, '+look.replace(/\.$/,'')) : 'A grown adult';
+  const frame=shot ? (', framed as a '+shot.toLowerCase()) : '';
+  const act=[doing].concat(pose).concat(expr).filter(Boolean);
+  const wear=cloth || (outfit.length?outfit.join(', '):'');
+  const bits=[];
+  bits.push(style+'.');
+  bits.push(who+frame+'.');
+  if(act.length) bits.push(act.join(', ').replace(/\.$/,'')+'.');
+  if(wear) bits.push('They wear '+wear.replace(/\.$/,'')+'.');
+  if(loc.length) bits.push('The place is '+loc.join(', ')+'.');
+  if(mood) bits.push('The mood is '+mood.replace(/\.$/,'')+'.');
+  if(extra) bits.push(extra.replace(/\.$/,'')+'.');
+  if(angle) bits.push(angle.replace(/\.$/,'')+'.');
+  bits.push('Every person shown is a grown adult.');
+  let s=bits.join(' ').replace(/\s+/g,' ').replace(/\s+\./g,'.').trim();
+  if(s.length>2000) s=s.slice(0,1997).replace(/\s+\S*$/,'')+'…';
+  if($('pgOut')) $('pgOut').value=s;
+  if($('pgCount')) $('pgCount').textContent=s.length+'/2000';
 }
-document.querySelectorAll('#pgShot .chip,#pgPose .chip,#pgExpr .chip,#pgOutfit .chip,#pgLoc .chip,#pgQual .chip').forEach(b=>{
+document.querySelectorAll('#pgShot .chip,#pgAngle .chip,#pgPose .chip,#pgExpr .chip,#pgOutfit .chip,#pgLoc .chip,#pgQual .chip').forEach(b=>{
   b.onclick=()=>{
-    const multi=b.dataset.g!=='pgShot';
+    const multi=b.dataset.g!=='pgShot' && b.dataset.g!=='pgAngle';
     if(!multi){ b.parentElement.querySelectorAll('.chip').forEach(x=>x.classList.remove('on')); }
     b.classList.toggle('on');
     buildPrompt();
@@ -3572,7 +3731,6 @@ if($('btnPushKin')) $('btnPushKin').onclick=async function(){
     if(c.directive) body.ai_directive=c.directive;
     if(c.example) body.ai_example_message=c.example;
     if(c.additional) body.ai_additional_context=c.additional;
-    if(c.currentScene) body.current_scene=c.currentScene;
     await apiPost('/update-info', body);
     $('cStatus').textContent='Pushed to Kindroid.';
   }catch(e){ $('cStatus').innerHTML='<span class="error">'+esc(e.message)+'</span>'; }
@@ -3674,14 +3832,13 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
   if($('btnSaveCharBottom')) $('btnSaveCharBottom').onclick=function(){ doSaveChar(false); };
 
   function addFieldCopies(){
-    var map=[['cName','Name'],['cAvatar','Image'],['cSelfie','Selfie template'],
+    var map=[['cName','Name'],['cAvatar','Image'],['cSelfie','Selfie template'],['cAvatarGen','Avatar generator'],
       ['cAppearance','Avatar description (Atelier)'],['cDescTableau','Avatar description (Tableau)'],
-      ['cFace','Facial description'],['cAiId','AI ID'],['cVoice','Voice'],
+      ['cFace','Facial description'],['cVoiceDesc','Voice description'],['cAiId','AI ID'],['cVoice','Voice'],
       ['cTag','Tag line'],['cBio','Bio'],['cShareCode','Share code'],['cCharacterLink','Character link'],
       ['cPersonality','Personality'],['cGreet','Greeting'],['cMem','Key memories'],
       ['cGrowth','Growth & relationship'],['cFacts','Important facts'],['cThreads','Ongoing threads'],
-      ['cDir','Response directives'],['cExample','Example message'],['cAdditional','Additional context'],
-      ['cScene','Current scene'],['cNotes','Author notes'],['cFlair','LLM flair']];
+      ['cDir','Response directives'],['cExample','Example message'],['cAdditional','Additional context']];
     map.forEach(function(pair){
       var id=pair[0], label=pair[1], el=$(id);
       if(!el) return;
@@ -3741,7 +3898,6 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
       if(c.directive) body.ai_directive=c.directive;
       if(c.example) body.ai_example_message=c.example;
       if(c.additional) body.ai_additional_context=c.additional;
-      if(c.currentScene) body.current_scene=c.currentScene;
       liveToast('Pushing…');
       await apiPost('/update-info', body);
       liveToast('Pushed to Kindroid');
@@ -3764,21 +3920,21 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
     var copyBtn=$(copyId);
     if(copyBtn && copyBtn.parentElement!==box) box.appendChild(copyBtn);
   }
-  pinOutput('p-prompt','pgOut','Generated prompt','btnCopyPrompt');
+  pinOutput('p-prompt','pgOut','Vignette','btnCopyPrompt');
   pinOutput('p-selfie','vidOut','V4 motion line','btnCopyMotion');
   if(typeof buildPrompt==='function') buildPrompt();
   if(typeof buildVideo==='function') buildVideo();
-  ['pgCloth','pgExtra'].forEach(function(id){ if($(id)) $(id).addEventListener('input', function(){ buildPrompt(); }); });
+  ['pgCloth','pgExtra','pgDoing','pgMood','pgLook'].forEach(function(id){ if($(id)) $(id).addEventListener('input', function(){ buildPrompt(); }); });
   if($('btnCopyPrompt')) $('btnCopyPrompt').onclick=function(){ buildPrompt(); copyOut($('pgOut')&&$('pgOut').value, 'Copied prompt'); };
   if($('btnCopyMotion')) $('btnCopyMotion').onclick=function(){ if(typeof buildVideo==='function') buildVideo(); copyOut($('vidOut')&&$('vidOut').value, 'Copied V4 motion'); };
 
-  document.querySelectorAll('#pgShot .chip,#pgPose .chip,#pgExpr .chip,#pgOutfit .chip,#pgLoc .chip,#pgQual .chip').forEach(function(b){
+  document.querySelectorAll('#pgShot .chip,#pgAngle .chip,#pgPose .chip,#pgExpr .chip,#pgOutfit .chip,#pgLoc .chip,#pgQual .chip').forEach(function(b){
     b.onclick=function(){
-      var multi=b.dataset.g!=='pgShot';
+      var multi=b.dataset.g!=='pgShot' && b.dataset.g!=='pgAngle';
       if(!multi){ b.parentElement.querySelectorAll('.chip').forEach(function(x){ x.classList.remove('on'); }); }
       b.classList.toggle('on');
       buildPrompt();
-      liveToast('Prompt updated');
+      liveToast('Vignette updated');
     };
   });
 
@@ -3964,6 +4120,7 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
     copyIosLink();
   }
   function openIosSheet(asInvite){
+    if(isWindowsApp()) return;
     fillIosQr();
     if($('iosSheetTitle')) $('iosSheetTitle').textContent=asInvite?'Someone sent you Kin Studio':'Send Kin Studio to iPhone';
     if($('iosSheetBlurb')) $('iosSheetBlurb').textContent=asInvite
@@ -3974,11 +4131,22 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
   window.sendIosLink=sendIosLink;
   if($('btnAndroidDl')) $('btnAndroidDl').hidden=false;
   if($('btnWinInstall')) $('btnWinInstall').hidden=false;
-  if($('btnIosInstall')){ $('btnIosInstall').hidden=false; $('btnIosInstall').textContent='iPhone'; }
-  if(window.KinNative){
-    if($('btnAndroidDl')) $('btnAndroidDl').hidden=true;
+  if($('btnIosInstall')){
+    $('btnIosInstall').hidden=false;
+    $('btnIosInstall').addEventListener('click', function(e){ e.preventDefault(); openIosSheet(false); });
   }
-  if($('btnIosInstall')) $('btnIosInstall').onclick=function(){ openIosSheet(isIosInvite()); };
+  if(isAndroidApp()){
+    if($('btnAndroidDl')) $('btnAndroidDl').hidden=true;
+    if($('btnWinInstall')) $('btnWinInstall').hidden=true;
+  }
+  if(isWindowsApp()){
+    document.body.classList.add('windows-app');
+    if($('btnAndroidDl')) $('btnAndroidDl').hidden=true;
+    if($('btnWinInstall')) $('btnWinInstall').hidden=true;
+    if($('btnIosInstall')) $('btnIosInstall').hidden=true;
+    var iosSheet=$('iosSheet'); if(iosSheet) iosSheet.hidden=true;
+    var winSheet=$('winSheet'); if(winSheet) winSheet.hidden=true;
+  }
   if($('btnIosSend')) $('btnIosSend').onclick=function(){ sendIosLink(); };
   if($('btnIosCopy')) $('btnIosCopy').onclick=copyIosLink;
   if($('btnIosSheetClose')) $('btnIosSheetClose').onclick=function(){
@@ -4008,7 +4176,6 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
     }
     liveToast('Chrome: ⋮ → Cast, save, and share → Install page as app');
   }
-  if($('btnWinInstall')) $('btnWinInstall').onclick=openWinSheet;
   if($('btnWinDoInstall')) $('btnWinDoInstall').onclick=doWinInstall;
   if($('btnWinSheetClose')) $('btnWinSheetClose').onclick=function(){
     var sh=$('winSheet'); if(sh) sh.hidden=true;
@@ -4016,27 +4183,35 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
   if($('winSheet')) $('winSheet').addEventListener('click', function(e){
     if(e.target===$('winSheet')) $('winSheet').hidden=true;
   });
-  if(isIosInvite()){
-    openIosSheet(true);
-  } else if(isIOS() && !isStandaloneApp() && !window.KinNative && !isEmbeddedPreview()){
-    try{
-      if(!sessionStorage.getItem('ksIosHint')){
-        sessionStorage.setItem('ksIosHint','1');
-        openIosSheet(true);
-      }
-    }catch(_){}
-  } else if(isWindows() && !isStandaloneApp() && !window.KinNative && !isEmbeddedPreview()){
+  if(!isWindowsApp() && !isAndroidApp() && isWindows() && !isStandaloneApp() && !isEmbeddedPreview()){
     try{
       if(!sessionStorage.getItem('ksWinHint')){
         sessionStorage.setItem('ksWinHint','1');
         openWinSheet();
       }
     }catch(_){}
+  } else if(!isWindowsApp() && !isAndroidApp() && (isIosInvite() || isIOS()) && !isStandaloneApp() && !isEmbeddedPreview()){
+    try{
+      if(!sessionStorage.getItem('ksIosHint')){
+        sessionStorage.setItem('ksIosHint','1');
+        openIosSheet(true);
+      }
+    }catch(_){}
   }
   try{
     var h=(location.hash||'').replace(/^#/,'').replace(/^p-/,'');
-    if(h){ var tab=document.querySelector('.tab[data-p="'+h+'"]'); if(tab) tab.click(); }
+    if(h && h!=='iphone'){ var tab=document.querySelector('.tab[data-p="'+h+'"]'); if(tab) tab.click(); }
   }catch(_){}
+  bindInstallButtons();
+  document.addEventListener('DOMContentLoaded', bindInstallButtons);
+  if(diskCache && $('diskWhere')){
+    var where='';
+    try{ where=String((window.KinDisk&&KinDisk.path&&KinDisk.path())||''); }catch(_){}
+    $('diskWhere').hidden=false;
+    $('diskWhere').textContent=where
+      ? ('Saved on this device in '+where+'. Not in the browser, so it can grow with the drive.')
+      : 'Saved on this device, not in the browser. It can grow with the drive.';
+  }
   liveToast('Kin Studio ready');
 } catch(e){ try{ liveToast('Boot error: '+(e&&e.message||e)); }catch(_){ } }
 })();
@@ -4067,28 +4242,849 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
 </div>
 <div id="winSheet" class="sheet" hidden>
   <div class="sheet-card" role="dialog" aria-labelledby="winSheetTitle">
-    <h2 id="winSheetTitle">Use Kin Studio on Windows</h2>
-    <p class="hint">Use <strong>Google Chrome</strong>, not Edge. Open the site in Chrome, then install it as an app. Start menu icon, its own window, your kn_ key.</p>
+    <h2 id="winSheetTitle">Kin Studio for Windows</h2>
+    <p class="hint">Download <strong>Kin-Studio.exe</strong> and open it. Kin Studio runs in its own window. It is not a Chrome tab and it is not Edge.</p>
     <div class="row">
-      <a class="btn" href="https://kin-studio.grok.me" target="_blank" rel="noopener">Open in Chrome</a>
-    </div>
-    <div class="row">
-      <button type="button" class="btn secondary" id="btnWinDoInstall">Install on this PC</button>
-    </div>
-    <div class="row">
-      <a class="btn secondary" href="/downloads/Kin-Studio-Windows.url" download="Kin Studio.url">Desktop shortcut</a>
-      <a class="btn secondary" href="/downloads/Install-Kin-Studio.bat" download="Install-Kin-Studio.bat">Chrome launcher</a>
+      <button type="button" class="btn" id="btnWinFile">Download Kin-Studio.exe</button>
     </div>
     <ol>
-      <li>Open <strong>Google Chrome</strong> (not Grok, not Edge).</li>
-      <li>Go to <strong>https://kin-studio.grok.me</strong></li>
-      <li>Click the install icon in the address bar, or ⋮ → <strong>Cast, save, and share</strong> → <strong>Install page as app</strong>.</li>
-      <li>If that is missing: ⋮ → <strong>Save and share</strong> → <strong>Create shortcut</strong> → check <strong>Open as window</strong>.</li>
-      <li>Paste <strong>your own</strong> kn_ key in Settings.</li>
+      <li>Tap the download. If the browser renames it, keep the name <strong>Kin-Studio.exe</strong>.</li>
+      <li>Open the file. Windows may say it is unrecognized. Choose <strong>More info</strong>, then <strong>Run anyway</strong>.</li>
+      <li>Kin Studio opens in its own window. Paste your kn_ key in Settings.</li>
     </ol>
-    <p class="hint">Installing from inside Grok does not work. It has to be Chrome with this site in its own tab.</p>
     <button type="button" class="btn secondary" id="btnWinSheetClose">Done</button>
   </div>
 </div>
+<div id="charChoice" class="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-labelledby="charChoiceTitle">
+    <h2 id="charChoiceTitle">Already in the app</h2>
+    <p class="hint" id="charChoiceCount"></p>
+    <p id="charChoiceText"></p>
+    <div class="row">
+      <button type="button" class="btn" id="charChoiceReplace">Replace</button>
+      <button type="button" class="btn secondary" id="charChoiceAdd">Add new</button>
+      <button type="button" class="btn secondary" id="charChoiceSkip">Skip</button>
+    </div>
+  </div>
+</div>
+<script>
+/* Kin Studio Games tab (added Nov 2026) */
+/* KinChess — tiny self-contained chess rules engine (MIT, written for Kin Studio).
+   Board: 64 squares, index 0 = a8 ... 63 = h1. Pieces 'PNBRQK' white, 'pnbrqk' black. */
+var KinChess=(function(){
+  var FILES='abcdefgh';
+  function sqName(i){ return FILES[i&7]+(8-(i>>3)); }
+  function sqIdx(n){ return (8-parseInt(n[1],10))*8+FILES.indexOf(n[0]); }
+  function isW(p){ return p && p===p.toUpperCase(); }
+  function colorOf(p){ return p ? (isW(p)?'w':'b') : null; }
+  var N_OFF=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+  var K_OFF=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  var B_DIR=[[-1,-1],[-1,1],[1,-1],[1,1]], R_DIR=[[-1,0],[1,0],[0,-1],[0,1]];
+  function Game(fen){ this.load(fen||'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'); }
+  Game.prototype.load=function(fen){
+    var f=fen.trim().split(/\s+/); this.b=new Array(64).fill(null);
+    var r=0,c=0; for(var i=0;i<f[0].length;i++){ var ch=f[0][i];
+      if(ch==='/'){ r++; c=0; } else if(/\d/.test(ch)){ c+=+ch; } else { this.b[r*8+c]=ch; c++; } }
+    this.turn=f[1]||'w'; this.castle=(f[2]&&f[2]!=='-')?f[2]:''; this.ep=(f[3]&&f[3]!=='-')?sqIdx(f[3]):-1;
+    this.half=+(f[4]||0); this.full=+(f[5]||1); this.hist=[]; this.sanList=[]; this.posCount={}; this._bump();
+  };
+  Game.prototype.fen=function(){
+    var s=''; for(var r=0;r<8;r++){ var e=0; for(var c=0;c<8;c++){ var p=this.b[r*8+c]; if(!p){e++;} else { if(e){s+=e;e=0;} s+=p; } } if(e) s+=e; if(r<7) s+='/'; }
+    return s+' '+this.turn+' '+(this.castle||'-')+' '+(this.ep>=0?sqName(this.ep):'-')+' '+this.half+' '+this.full;
+  };
+  Game.prototype._key=function(){ return this.fen().split(' ').slice(0,4).join(' '); };
+  Game.prototype._bump=function(){ var k=this._key(); this.posCount[k]=(this.posCount[k]||0)+1; };
+  Game.prototype.attacked=function(sq, by){ // is square sq attacked by color 'by'
+    var b=this.b, r=sq>>3, c=sq&7, i, rr, cc, p;
+    var pr = by==='w' ? r+1 : r-1; // attacking pawn sits one rank "behind" from its perspective
+    for(i=-1;i<=1;i+=2){ cc=c+i; if(pr>=0&&pr<8&&cc>=0&&cc<8){ p=b[pr*8+cc]; if(p===(by==='w'?'P':'p')) return true; } }
+    for(i=0;i<8;i++){ rr=r+N_OFF[i][0]; cc=c+N_OFF[i][1]; if(rr>=0&&rr<8&&cc>=0&&cc<8){ p=b[rr*8+cc]; if(p===(by==='w'?'N':'n')) return true; } }
+    for(i=0;i<8;i++){ rr=r+K_OFF[i][0]; cc=c+K_OFF[i][1]; if(rr>=0&&rr<8&&cc>=0&&cc<8){ p=b[rr*8+cc]; if(p===(by==='w'?'K':'k')) return true; } }
+    var sl=function(dirs, set){ for(var d=0;d<4;d++){ var r2=r+dirs[d][0], c2=c+dirs[d][1];
+      while(r2>=0&&r2<8&&c2>=0&&c2<8){ var q=b[r2*8+c2]; if(q){ if(colorOf(q)===by && set.indexOf(q.toUpperCase())>=0) return true; break; } r2+=dirs[d][0]; c2+=dirs[d][1]; } } return false; };
+    return sl(B_DIR,'BQ') || sl(R_DIR,'RQ');
+  };
+  Game.prototype.kingSq=function(color){ var k=color==='w'?'K':'k'; for(var i=0;i<64;i++) if(this.b[i]===k) return i; return -1; };
+  Game.prototype.inCheck=function(color){ color=color||this.turn; var k=this.kingSq(color); return k>=0 && this.attacked(k, color==='w'?'b':'w'); };
+  Game.prototype._pseudo=function(){
+    var out=[], b=this.b, me=this.turn, them=me==='w'?'b':'w', self=this;
+    function add(f,t,promo,flag){ out.push({from:f,to:t,piece:b[f],captured:flag==='ep'?(me==='w'?'p':'P'):b[t],promo:promo||null,flag:flag||''}); }
+    for(var sq=0;sq<64;sq++){ var p=b[sq]; if(!p||colorOf(p)!==me) continue; var r=sq>>3,c=sq&7,P=p.toUpperCase(),i,rr,cc,t;
+      if(P==='P'){ var dir=me==='w'?-1:1, start=me==='w'?6:1, last=me==='w'?0:7; rr=r+dir;
+        if(rr>=0&&rr<8&&!b[rr*8+c]){ if(rr===last){ 'QRBN'.split('').forEach(function(x){ add(sq,rr*8+c,x); }); } else { add(sq,rr*8+c);
+          if(r===start && !b[(r+2*dir)*8+c]) add(sq,(r+2*dir)*8+c,null,'double'); } }
+        for(i=-1;i<=1;i+=2){ cc=c+i; if(cc<0||cc>7||rr<0||rr>7) continue; t=rr*8+cc;
+          if(b[t] && colorOf(b[t])===them){ if(rr===last){ 'QRBN'.split('').forEach(function(x){ add(sq,t,x); }); } else add(sq,t); }
+          else if(t===this.ep) add(sq,t,null,'ep'); }
+      } else if(P==='N'||P==='K'){ var offs=P==='N'?N_OFF:K_OFF; for(i=0;i<8;i++){ rr=r+offs[i][0]; cc=c+offs[i][1]; if(rr<0||rr>7||cc<0||cc>7) continue; t=rr*8+cc; if(!b[t]||colorOf(b[t])===them) add(sq,t); }
+        if(P==='K'){ var row=me==='w'?7:0, ks=me==='w'?'K':'k', qs=me==='w'?'Q':'q';
+          if(sq===row*8+4 && !this.attacked(sq,them)){
+            if(this.castle.indexOf(ks)>=0 && !b[row*8+5] && !b[row*8+6] && b[row*8+7]===(me==='w'?'R':'r') && !this.attacked(row*8+5,them) && !this.attacked(row*8+6,them)) add(sq,row*8+6,null,'k');
+            if(this.castle.indexOf(qs)>=0 && !b[row*8+3] && !b[row*8+2] && !b[row*8+1] && b[row*8]===(me==='w'?'R':'r') && !this.attacked(row*8+3,them) && !this.attacked(row*8+2,them)) add(sq,row*8+2,null,'q');
+          } }
+      } else { var dirs=P==='B'?B_DIR:P==='R'?R_DIR:B_DIR.concat(R_DIR); for(i=0;i<dirs.length;i++){ rr=r+dirs[i][0]; cc=c+dirs[i][1];
+          while(rr>=0&&rr<8&&cc>=0&&cc<8){ t=rr*8+cc; if(b[t]){ if(colorOf(b[t])===them) add(sq,t); break; } add(sq,t); rr+=dirs[i][0]; cc+=dirs[i][1]; } } }
+    }
+    return out;
+  };
+  Game.prototype._make=function(m){
+    var b=this.b, me=this.turn;
+    this.hist.push({b:b.slice(),turn:this.turn,castle:this.castle,ep:this.ep,half:this.half,full:this.full,posCount:Object.assign({},this.posCount)});
+    b[m.to]=m.promo ? (me==='w'?m.promo:m.promo.toLowerCase()) : b[m.from]; b[m.from]=null;
+    if(m.flag==='ep') b[m.to+(me==='w'?8:-8)]=null;
+    if(m.flag==='k'){ b[m.to-1]=b[m.to+1]; b[m.to+1]=null; }
+    if(m.flag==='q'){ b[m.to+1]=b[m.to-2]; b[m.to-2]=null; }
+    var cs=this.castle; var strip=function(ch){ cs=cs.replace(ch,''); };
+    if(m.piece==='K'){ strip('K'); strip('Q'); } if(m.piece==='k'){ strip('k'); strip('q'); }
+    [[63,'K'],[56,'Q'],[7,'k'],[0,'q']].forEach(function(x){ if(m.from===x[0]||m.to===x[0]) strip(x[1]); });
+    this.castle=cs;
+    this.ep = m.flag==='double' ? (m.from+m.to)/2 : -1;
+    this.half = (m.piece.toUpperCase()==='P' || m.captured) ? 0 : this.half+1;
+    if(me==='b') this.full++;
+    this.turn = me==='w'?'b':'w';
+  };
+  Game.prototype._unmake=function(){ var h=this.hist.pop(); this.b=h.b; this.turn=h.turn; this.castle=h.castle; this.ep=h.ep; this.half=h.half; this.full=h.full; this.posCount=h.posCount; };
+  Game.prototype.moves=function(){
+    var me=this.turn, legal=[], ps=this._pseudo(), i;
+    for(i=0;i<ps.length;i++){ this._make(ps[i]); if(!this.inCheck(me)) legal.push(ps[i]); this._unmake(); }
+    for(i=0;i<legal.length;i++) legal[i].san=this._san(legal[i], legal);
+    return legal;
+  };
+  Game.prototype._san=function(m, all){
+    var s; var P=m.piece.toUpperCase();
+    if(m.flag==='k') s='O-O'; else if(m.flag==='q') s='O-O-O';
+    else { s='';
+      if(P!=='P'){ s=P; var amb=all.filter(function(o){ return o!==m && o.to===m.to && o.piece===m.piece && o.from!==m.from; });
+        if(amb.length){ var sameFile=amb.some(function(o){ return (o.from&7)===(m.from&7); }), sameRank=amb.some(function(o){ return (o.from>>3)===(m.from>>3); });
+          if(!sameFile) s+=FILES[m.from&7]; else if(!sameRank) s+=(8-(m.from>>3)); else s+=sqName(m.from); } }
+      if(m.captured){ if(P==='P') s+=FILES[m.from&7]; s+='x'; }
+      s+=sqName(m.to); if(m.promo) s+='='+m.promo; }
+    this._make(m); var chk=this.inCheck(this.turn); if(chk){ var any=false, ps=this._pseudo(), me=this.turn; for(var i=0;i<ps.length&&!any;i++){ this._make(ps[i]); if(!this.inCheck(me)) any=true; this._unmake(); } s+=any?'+':'#'; } this._unmake();
+    return s;
+  };
+  Game.prototype.move=function(mv){ // mv: SAN string or {from,to,promo}
+    var list=this.moves(), m=null;
+    if(typeof mv==='string'){ var t=KinChess.norm(mv); m=list.find(function(x){ return KinChess.norm(x.san)===t; }) || list.find(function(x){ return (sqName(x.from)+sqName(x.to)+(x.promo?x.promo.toLowerCase():''))===t.toLowerCase() || (!x.promo||x.promo==='Q') && (sqName(x.from)+sqName(x.to))===t.toLowerCase(); }); }
+    else if(mv){ m=list.find(function(x){ return sqName(x.from)===mv.from && sqName(x.to)===mv.to && (!x.promo || x.promo===(mv.promo||'Q')); }); }
+    if(!m) return null;
+    this._make(m); this.sanList.push(m.san); this._bump();
+    return {from:sqName(m.from),to:sqName(m.to),san:m.san,piece:m.piece,captured:m.captured,promo:m.promo};
+  };
+  Game.prototype.undo=function(){ if(!this.hist.length) return null; this._unmake(); return this.sanList.pop(); };
+  Game.prototype.insufficient=function(){ var pcs=this.b.filter(Boolean).map(function(p){return p.toUpperCase();}).filter(function(p){return p!=='K';});
+    if(!pcs.length) return true; if(pcs.length===1 && (pcs[0]==='B'||pcs[0]==='N')) return true; return false; };
+  Game.prototype.status=function(){ var ms=this.moves();
+    if(!ms.length) return this.inCheck() ? {over:true,result:'checkmate',winner:this.turn==='w'?'b':'w'} : {over:true,result:'stalemate',winner:null};
+    if(this.half>=100) return {over:true,result:'fifty-move rule',winner:null};
+    if(this.insufficient()) return {over:true,result:'insufficient material',winner:null};
+    if((this.posCount[this._key()]||0)>=3) return {over:true,result:'threefold repetition',winner:null};
+    return {over:false,check:this.inCheck()}; };
+  Game.prototype.pgn=function(){ var s=[]; for(var i=0;i<this.sanList.length;i++){ if(i%2===0) s.push((i/2+1)+'.'); s.push(this.sanList[i]); } return s.join(' '); };
+  Game.prototype.perft=function(d){ if(d===0) return 1; var me=this.turn, ps=this._pseudo(), n=0; for(var i=0;i<ps.length;i++){ this._make(ps[i]); if(!this.inCheck(me)) n+=this.perft(d-1); this._unmake(); } return n; };
+  function norm(s){ return String(s||'').replace(/[+#!?]/g,'').replace(/0-0-0/g,'O-O-O').replace(/0-0/g,'O-O').replace(/^o-o-o$/i,'O-O-O').replace(/^o-o$/i,'O-O').replace(/=?([qrbn])$/i,function(a,x){ return '='+x.toUpperCase(); }).replace(/^([a-h]\d[a-h]\d)=([QRBN])$/,function(a,x,y){ return x+y.toLowerCase(); }).trim(); }
+  return { Game:Game, sqName:sqName, sqIdx:sqIdx, norm:norm };
+})();
+if(typeof module!=='undefined') module.exports=KinChess;
+
+/* Kin Studio — Games tab. The app is the referee and keeps the true game state;
+   the Kin plays through the Kindroid API (/send-message) using the saved kn_ key. */
+(function(){
+'use strict';
+var TRIVIA = [{"q": "What is the Wizard's First Rule?", "a": "People are stupid", "w": ["Never trust a witch woman", "Magic always has a price", "Thinking you know something is the most dangerous thing"], "book": "Wizard's First Rule"}, {"q": "What was Richard's job in Hartland when the story begins?", "a": "Woods guide", "w": ["Blacksmith", "Boundary warden", "Scribe"], "book": "Wizard's First Rule"}, {"q": "What position was Richard's brother Michael accepting at the start?", "a": "First Councilor", "w": ["Captain of the Guard", "Mayor of Hartland", "Lord General"], "book": "Wizard's First Rule"}, {"q": "What is Zedd's full name?", "a": "Zeddicus Zu'l Zorander", "w": ["Zeddicus Zu'l Rahl", "Zedd Cypher", "Zeddicus Zorrander Rahl"], "book": "Wizard's First Rule"}, {"q": "Which secret book did Richard's father make him memorize?", "a": "The Book of Counted Shadows", "w": ["The Book of Life", "The Book of the Dead", "The Grace of the Wizards"], "book": "Wizard's First Rule"}, {"q": "What was the name of Kahlan's sister who died?", "a": "Dennee", "w": ["Cyrilla", "Denna", "Nadine"], "book": "Wizard's First Rule"}, {"q": "Who was 'the right hand of Rahl'?", "a": "Demmin Nass", "w": ["Egan", "General Trimack", "Chase"], "book": "Wizard's First Rule"}, {"q": "What is the name of the red dragon Richard meets?", "a": "Scarlet", "w": ["Gratch", "Ruby", "Ember"], "book": "Wizard's First Rule"}, {"q": "Who is Shota's companion?", "a": "Samuel", "w": ["Giller", "Rachel", "Siddin"], "book": "Wizard's First Rule"}, {"q": "Adie is known as what kind of woman?", "a": "The bone woman", "w": ["The witch woman", "The wise woman", "The healer of the pass"], "book": "Wizard's First Rule"}, {"q": "What does Darken Rahl seek in Wizard's First Rule?", "a": "The boxes of Orden", "w": ["The Stone of Tears", "The Sword of Truth", "The Temple of the Winds"], "book": "Wizard's First Rule"}, {"q": "What weapon does a Mord-Sith carry?", "a": "An Agiel", "w": ["A Rada'Han", "A dacra", "A sliph"], "book": "Wizard's First Rule"}, {"q": "Which Mord-Sith captured and trained Richard?", "a": "Denna", "w": ["Cara", "Raina", "Constance"], "book": "Wizard's First Rule"}, {"q": "What was Chase's job?", "a": "Boundary warden", "w": ["Woods guide", "Innkeeper", "Wizard"], "book": "Wizard's First Rule"}, {"q": "What did Rachel call her doll?", "a": "Sara", "w": ["Violet", "Abby", "Jana"], "book": "Wizard's First Rule"}, {"q": "Who ruled Tamarang?", "a": "Queen Milena", "w": ["Queen Cyrilla", "Queen Violet", "Duchess Lumholtz"], "book": "Wizard's First Rule"}, {"q": "Which wizard served Queen Milena?", "a": "Giller", "w": ["Nathan", "Zedd", "Drefan"], "book": "Wizard's First Rule"}, {"q": "Which Mud People elder can call birds to himself?", "a": "The Bird Man", "w": ["Savidlin", "Chandalen", "Siddin"], "book": "Wizard's First Rule"}, {"q": "What is a Confessor's blood rage called?", "a": "Con Dar", "w": ["Ja'La", "Dacra", "Rada'Han"], "book": "Wizard's First Rule"}, {"q": "In which city stands the Wizard's Keep?", "a": "Aydindril", "w": ["Tanimura", "Altur'Rang", "Hartland"], "book": "Wizard's First Rule"}, {"q": "What rank of wizard is Zedd?", "a": "Wizard of the First Order", "w": ["Wizard of the Second Order", "Wizard of the Third Order", "Wizard of the Fifth Order"], "book": "Wizard's First Rule"}, {"q": "What kind of creature is Shar?", "a": "A night wisp", "w": ["A gar", "A dragon", "A screeling"], "book": "Wizard's First Rule"}, {"q": "What is Richard's family name when the story begins?", "a": "Cypher", "w": ["Rahl", "Zorander", "Amnell"], "book": "Wizard's First Rule"}, {"q": "What is Kahlan's family name?", "a": "Amnell", "w": ["Searus", "Rahl", "Cypher"], "book": "Wizard's First Rule"}, {"q": "What separated Westland from the Midlands?", "a": "The boundary", "w": ["The Valley of the Lost", "The Kern River", "The Rang'Shada Mountains"], "book": "Wizard's First Rule"}, {"q": "What title does Kahlan hold?", "a": "Mother Confessor", "w": ["Prelate", "First Wizard", "Lord Rahl"], "book": "Wizard's First Rule"}, {"q": "What name was Richard given as wielder of the sword?", "a": "The Seeker of Truth", "w": ["The War Wizard", "The Lord General", "The Keeper's Bane"], "book": "Wizard's First Rule"}, {"q": "What was the name of Richard's father in Hartland?", "a": "George Cypher", "w": ["Michael Cypher", "Panis Cypher", "Zedd Cypher"], "book": "Wizard's First Rule"}, {"q": "In which city is the Palace of the Prophets?", "a": "Tanimura", "w": ["Aydindril", "Altur'Rang", "Ebinissia"], "book": "Stone of Tears"}, {"q": "What collar did the Sisters of the Light put on Richard?", "a": "A Rada'Han", "w": ["An Agiel", "A dacra", "A Journey Book"], "book": "Stone of Tears"}, {"q": "Which Sister of the Light brought Richard to the Palace?", "a": "Sister Verna", "w": ["Sister Ulicia", "Sister Nicci", "Sister Phoebe"], "book": "Stone of Tears"}, {"q": "What is the Prelate's given name?", "a": "Annalina", "w": ["Ulicia", "Verna", "Magda"], "book": "Stone of Tears"}, {"q": "Which prophet was kept in the Palace of the Prophets?", "a": "Nathan Rahl", "w": ["Drefan Rahl", "Warren", "Joseph Ander"], "book": "Stone of Tears"}, {"q": "Which novice at the Palace was smitten with Richard?", "a": "Pasha", "w": ["Jennsen", "Rachel", "Nadine"], "book": "Stone of Tears"}, {"q": "What is the name of the gar Richard raised?", "a": "Gratch", "w": ["Scarlet", "Samuel", "Betty"], "book": "Stone of Tears"}, {"q": "What lizard-like assassins can turn invisible in their capes?", "a": "Mriswith", "w": ["Screelings", "Gars", "Night wisps"], "book": "Stone of Tears"}, {"q": "What are the Sisters who secretly serve the Keeper called?", "a": "Sisters of the Dark", "w": ["Sisters of the Light", "Sisters of the Blood", "Sisters of Death"], "book": "Stone of Tears"}, {"q": "Which Sister leads the Sisters of the Dark?", "a": "Sister Ulicia", "w": ["Sister Verna", "Sister Pasha", "Sister Leoma"], "book": "Stone of Tears"}, {"q": "Which Mud People warrior blamed Richard for Darken Rahl's attack on the village?", "a": "Chandalen", "w": ["Savidlin", "Siddin", "Ulic"], "book": "Stone of Tears"}, {"q": "Which Galean city was massacred, leading Kahlan to lead young recruits against the Order?", "a": "Ebinissia", "w": ["Tanimura", "Aydindril", "Fairfield"], "book": "Stone of Tears"}, {"q": "What do the Sisters of the Dark call the towers Richard must pass through?", "a": "The Towers of Perdition", "w": ["The Pillars of Creation", "The Temple of the Winds", "The Hall of the Betrayer"], "book": "Stone of Tears"}, {"q": "Which young wizard studies prophecies in the Palace vaults?", "a": "Warren", "w": ["Drefan", "Giller", "Nathan"], "book": "Stone of Tears"}, {"q": "Who is Lord General of the Blood of the Fold?", "a": "Tobias Brogan", "w": ["Demmin Nass", "General Reibisch", "Dalton Campbell"], "book": "Blood of the Fold"}, {"q": "What is Tobias Brogan's sister's name?", "a": "Lunetta", "w": ["Lunessa", "Lathea", "Leoma"], "book": "Blood of the Fold"}, {"q": "Who is Brogan's right-hand officer in Blood of the Fold?", "a": "Galtero", "w": ["Egan", "Ulic", "Meiffert"], "book": "Blood of the Fold"}, {"q": "Which D'Haran general commands in the Midlands in Blood of the Fold?", "a": "General Reibisch", "w": ["General Trimack", "General Meiffert", "General Leiden"], "book": "Blood of the Fold"}, {"q": "What is Jagang's special ability?", "a": "Dream walker", "w": ["Seer", "Healer", "War wizard"], "book": "Blood of the Fold"}, {"q": "Whom does Cara introduce as her sisters of the Agiel?", "a": "Hally, Berdine and Raina", "w": ["Denna, Constance and Hania", "Rikka, Nyda and Vika", "Cassia, Laurin and Vale"], "book": "Blood of the Fold"}, {"q": "Which young man, controlled by Jagang, appears in Aydindril at the start of Temple of the Winds?", "a": "Marlin Pickard", "w": ["Galtero", "Tobias Brogan", "Oba Schalk"], "book": "Temple of the Winds"}, {"q": "Who is the emperor of the Imperial Order?", "a": "Jagang", "w": ["Darken Rahl", "Narev", "Sulachan"], "book": "Blood of the Fold"}, {"q": "What is the name of Richard's half-brother, a healer, in Temple of the Winds?", "a": "Drefan", "w": ["Oba", "Darken", "Nathan"], "book": "Temple of the Winds"}, {"q": "Which Hartland woman claims she is to marry Richard?", "a": "Nadine", "w": ["Pasha", "Jennsen", "Violet"], "book": "Temple of the Winds"}, {"q": "What disease strikes Aydindril in Temple of the Winds?", "a": "The plague", "w": ["The pox", "The sweating sickness", "Black lung"], "book": "Temple of the Winds"}, {"q": "Which Mord-Sith dies of plague in Temple of the Winds?", "a": "Raina", "w": ["Berdine", "Cara", "Denna"], "book": "Temple of the Winds"}, {"q": "Who are Richard's two big D'Haran bodyguards?", "a": "Ulic and Egan", "w": ["Ulic and Galtero", "Egan and Meiffert", "Chase and Egan"], "book": "Temple of the Winds"}, {"q": "What warning phrase does Shota give Richard in Temple of the Winds?", "a": "The wind is hunting him", "w": ["The fire is coming for him", "The stone will betray him", "The sword will fail him"], "book": "Temple of the Winds"}, {"q": "Which game do Richard and Kahlan link to the plague in Temple of the Winds?", "a": "Ja'La", "w": ["Kick the stone", "Rope ball", "Bones"], "book": "Temple of the Winds"}, {"q": "Which nation do Richard and Kahlan try to win over in Soul of the Fire?", "a": "Anderith", "w": ["Bandakar", "Galea", "Kelton"], "book": "Soul of the Fire"}, {"q": "Who is the ambitious aide to the Minister of Culture?", "a": "Dalton Campbell", "w": ["Bertrand Chanboor", "Galtero", "Brother Narev"], "book": "Soul of the Fire"}, {"q": "Who is Anderith's Minister of Culture?", "a": "Bertrand Chanboor", "w": ["Dalton Campbell", "Joseph Ander", "Hildemara"], "book": "Soul of the Fire"}, {"q": "What deadly beings are loosed into the world in Soul of the Fire?", "a": "The chimes", "w": ["The mriswith", "The screelings", "The half people"], "book": "Soul of the Fire"}, {"q": "Who is the leader of the Baka Ban Mana?", "a": "Du Chaillu", "w": ["Six", "Lunetta", "Jit"], "book": "Soul of the Fire"}, {"q": "Whose archaic lyrics are cherished in Anderith?", "a": "Joseph Ander", "w": ["Baraccus", "Merritt", "Kolo"], "book": "Soul of the Fire"}, {"q": "What are the two peoples of Anderith?", "a": "Anders and Hakens", "w": ["D'Harans and Keltans", "Mud People and Hakens", "Galeans and Anders"], "book": "Soul of the Fire"}, {"q": "What is Dalton Campbell's wife's name?", "a": "Teresa", "w": ["Hildemara", "Nicci", "Franca"], "book": "Soul of the Fire"}, {"q": "What is Nicci's feared nickname?", "a": "Death's Mistress", "w": ["The Slide", "The Witch Woman", "The Dark Prelate"], "book": "Faith of the Fallen"}, {"q": "To which city does Nicci take Richard?", "a": "Altur'Rang", "w": ["Tanimura", "Aydindril", "Fairfield"], "book": "Faith of the Fallen"}, {"q": "Which blacksmith becomes Richard's friend in Altur'Rang?", "a": "Victor Cascella", "w": ["Ishaq", "Kamil", "Tom"], "book": "Faith of the Fallen"}, {"q": "Who leads the Fellowship of Order in Faith of the Fallen?", "a": "Brother Narev", "w": ["Jagang", "Galtero", "Hannis Arc"], "book": "Faith of the Fallen"}, {"q": "What spell links Nicci and Kahlan so that harm to Nicci hurts Kahlan?", "a": "A maternity spell", "w": ["The Chainfire spell", "A web of binding", "The Rada'Han spell"], "book": "Faith of the Fallen"}, {"q": "Which D'Haran officer fights alongside Kahlan in Faith of the Fallen?", "a": "Benjamin Meiffert", "w": ["General Reibisch", "Galtero", "Egan"], "book": "Faith of the Fallen"}, {"q": "Who runs the transport company Richard works for in Altur'Rang?", "a": "Ishaq", "w": ["Victor", "Kamil", "Nabbi"], "book": "Faith of the Fallen"}, {"q": "Which two young men from Altur'Rang does Richard teach?", "a": "Kamil and Nabbi", "w": ["Owen and Anson", "Ulic and Egan", "Prindin and Tossidin"], "book": "Faith of the Fallen"}, {"q": "What term describes people like Jennsen, who are completely untouched by magic?", "a": "Pristinely ungifted", "w": ["Twice born", "Hollow ones", "Spark-blind"], "book": "Naked Empire"}, {"q": "What is the name of Jennsen's goat?", "a": "Betty", "w": ["Sara", "Gratch", "Daisy"], "book": "The Pillars of Creation"}, {"q": "Who is Jagang's strategist who meets Jennsen?", "a": "Sebastian", "w": ["Owen", "Oba", "Friedrich"], "book": "The Pillars of Creation"}, {"q": "What is Oba's family name at the start of The Pillars of Creation?", "a": "Schalk", "w": ["Rahl", "Gilder", "Cypher"], "book": "The Pillars of Creation"}, {"q": "Who is the sorceress living at the Pillars of Creation, Lathea's sister?", "a": "Althea", "w": ["Lunetta", "Adie", "Ann"], "book": "The Pillars of Creation"}, {"q": "Who is Althea's husband?", "a": "Friedrich", "w": ["Tom", "Ishaq", "Victor"], "book": "The Pillars of Creation"}, {"q": "Which sorceress in Oba's town sells his mother medicine?", "a": "Lathea", "w": ["Lunetta", "Leoma", "Jit"], "book": "The Pillars of Creation"}, {"q": "What is the hidden empire of the ungifted called?", "a": "Bandakar", "w": ["Anderith", "Kelton", "Galea"], "book": "Naked Empire"}, {"q": "Which man from Bandakar asks Richard for help?", "a": "Owen", "w": ["Sebastian", "Ishaq", "Kamil"], "book": "Naked Empire"}, {"q": "What does Nicholas call himself?", "a": "The Slide", "w": ["The Phantom", "The Witch", "The Keeper"], "book": "Naked Empire"}, {"q": "What happened to Richard early in Naked Empire?", "a": "He was poisoned", "w": ["He lost his sword", "He was blinded", "He lost his memory"], "book": "Naked Empire"}, {"q": "Which spell erased everyone's memory of Kahlan?", "a": "Chainfire", "w": ["Orden", "Con Dar", "Mother's bond"], "book": "Chainfire"}, {"q": "Who steals the Sword of Truth in Chainfire?", "a": "Samuel", "w": ["Jagang", "Six", "Nicci"], "book": "Chainfire"}, {"q": "Which Sister of the Dark is one of the four who stole Kahlan?", "a": "Tovi", "w": ["Verna", "Phoebe", "Pasha"], "book": "Chainfire"}, {"q": "Which witch woman serves Jagang and threatens Shota's lands?", "a": "Six", "w": ["Jit", "Lunetta", "Adie"], "book": "Phantom"}, {"q": "Which young queen does Six control?", "a": "Violet", "w": ["Milena", "Cyrilla", "Jennsen"], "book": "Phantom"}, {"q": "What game does Richard play in the Imperial Order's camp?", "a": "Ja'La dh Jin", "w": ["Kick the stone", "Bones", "Tiles"], "book": "Confessor"}, {"q": "What name does Richard use as a prisoner in Jagang's camp?", "a": "Ruben", "w": ["Kolo", "Owen", "Cypher"], "book": "Confessor"}, {"q": "What does Richard put into play to end the war?", "a": "The boxes of Orden", "w": ["The Stone of Tears", "The Omen Machine", "The Chainfire spell"], "book": "Confessor"}, {"q": "What ancient machine is found beneath the People's Palace?", "a": "The Omen Machine", "w": ["The sliph", "The chimes", "The Pillars"], "book": "The Omen Machine"}, {"q": "Who is the Bishop of Fajin Province?", "a": "Hannis Arc", "w": ["Brother Narev", "Bertrand Chanboor", "Sulachan"], "book": "The Omen Machine"}, {"q": "Who is the Hedge Maid?", "a": "Jit", "w": ["Six", "Adie", "Lathea"], "book": "The Omen Machine"}, {"q": "What are the soulless creatures that eat people alive in The Third Kingdom?", "a": "The half people", "w": ["The chimes", "The mriswith", "The gars"], "book": "The Third Kingdom"}, {"q": "Which ancient emperor is resurrected in Severed Souls?", "a": "Sulachan", "w": ["Jagang", "Narev", "Kolo"], "book": "Severed Souls"}, {"q": "Who is the First Confessor?", "a": "Magda Searus", "w": ["Kahlan Amnell", "Annalina Aldurren", "Isidore"], "book": "The First Confessor"}, {"q": "Which wizard creates the Confessor power for Magda?", "a": "Merritt", "w": ["Baraccus", "Lothain", "Nathan"], "book": "The First Confessor"}, {"q": "Who was Magda's husband, the First Wizard?", "a": "Baraccus", "w": ["Merritt", "Lothain", "Zedd"], "book": "The First Confessor"}, {"q": "Who is the head prosecutor in The First Confessor?", "a": "Lothain", "w": ["Baraccus", "Merritt", "Sulachan"], "book": "The First Confessor"}, {"q": "What false name does Zedd give while traveling with Adie in Stone of Tears?", "a": "Ruben Rybnik", "w": ["Owen Cypher", "Erilyn Zorander", "Galtero Rybnik"], "book": "Stone of Tears"}, {"q": "What is Sister Verna's family name?", "a": "Sauventreen", "w": ["Aldurren", "Searus", "Rendall"], "book": "Stone of Tears"}, {"q": "What is Pasha's family name?", "a": "Maes", "w": ["Amnell", "Gilder", "Schalk"], "book": "Stone of Tears"}, {"q": "What is the name of Richard's horse in Stone of Tears?", "a": "Bonnie", "w": ["Betty", "Scarlet", "Daisy"], "book": "Stone of Tears"}, {"q": "Which Mud People hunter becomes Richard's friend?", "a": "Savidlin", "w": ["Chandalen", "Siddin", "Tossidin"], "book": "Wizard's First Rule"}, {"q": "What is the name of the Haken scullion in Soul of the Fire?", "a": "Fitch", "w": ["Owen", "Kamil", "Tom"], "book": "Soul of the Fire"}, {"q": "What does the captured mriswith hiss when asked who sent it?", "a": "The dream walker", "w": ["The Keeper", "The Slide", "The Prelate"], "book": "Blood of the Fold"}, {"q": "Who travels to Aydindril seeking a wizard in Debt of Bones?", "a": "Abby", "w": ["Jennsen", "Rachel", "Nadine"], "book": "Debt of Bones"}, {"q": "What is Abby's daughter's name?", "a": "Jana", "w": ["Rachel", "Sara", "Violet"], "book": "Debt of Bones"}, {"q": "Who is Zedd's wife in Debt of Bones?", "a": "Erilyn", "w": ["Delora", "Adie", "Magda"], "book": "Debt of Bones"}, {"q": "Which sorceress on the council helps in Debt of Bones?", "a": "Delora", "w": ["Lathea", "Ulicia", "Lunetta"], "book": "Debt of Bones"}, {"q": "Who was Lord Rahl in Debt of Bones, Darken Rahl's father?", "a": "Panis Rahl", "w": ["Darken Rahl", "Alric Rahl", "Oba Rahl"], "book": "Debt of Bones"}];
+var WYR_BUILTIN = [
+  ['Wield the Sword of Truth for a day','Have Zedd\'s gift of magic for a day'],
+  ['Be guarded by Cara','Be guarded by Ulic and Egan'],
+  ['Live in the Mud People\'s village','Live in the Wizard\'s Keep'],
+  ['Have a gar like Gratch as a friend','Have a red dragon like Scarlet as a friend'],
+  ['Be a Confessor','Be a war wizard'],
+  ['Face a mriswith in the dark','Face a screeling in daylight'],
+  ['Spend a year at the Palace of the Prophets','Spend a year at the People\'s Palace'],
+  ['Have Nathan\'s gift of prophecy','Have Shota\'s gift of seeing the flow of time'],
+  ['Live in Hartland as a woods guide','Live in Aydindril at the Confessors\' Palace'],
+  ['Cross the boundary at night','Cross the Valley of the Lost alone'],
+  ['Carry an Agiel','Carry a dacra'],
+  ['Share a meal with Zedd','Share a meal with Adie'],
+  ['Be trained by Sister Verna','Be trained by Nathan Rahl'],
+  ['Have the chicken that is not a chicken as a pet','Have Betty the goat as a pet'],
+  ['Play a match of Ja\'La dh Jin','Sit through a Mud People elder council'],
+  ['Know every prophecy in the vaults','Know every secret of the Book of Counted Shadows'],
+  ['Be pristinely ungifted','Be gifted but never able to use it'],
+  ['Travel by sliph','Travel on dragonback'],
+  ['Be able to fly','Be able to read minds'],
+  ['Always know when someone is lying','Always get away with lying'],
+  ['Live by the sea','Live in the mountains'],
+  ['Have endless free coffee','Have endless free pizza'],
+  ['Explore space','Explore the deep ocean'],
+  ['Be famous','Be secretly rich'],
+  ['Talk to animals','Speak every human language'],
+  ['Go 100 years into the past','Go 100 years into the future'],
+  ['Never feel cold again','Never feel tired again'],
+  ['Have a personal chef','Have a personal driver'],
+  ['Live without music','Live without movies'],
+  ['Win a cooking contest','Win a dance contest'],
+  ['Read every book ever written','Hear every song ever written'],
+  ['Have a pause button for life','Have a rewind button for life'],
+  ['Spend a night in a haunted castle','Spend a night alone in a forest'],
+  ['Be the funniest person in the room','Be the smartest person in the room'],
+  ['Always be 10 minutes early','Always be 10 minutes late'],
+  ['Have one real wish granted','Have three tiny wishes granted'],
+  ['Live in a treehouse','Live on a houseboat'],
+  ['Be a master swordsman','Be a master archer'],
+  ['Never have to sleep','Never have to eat'],
+  ['Get a letter from your future self','Send a letter to your past self']
+];
+var STORY_SETTINGS = [
+  {id:'sot', label:'Sword of Truth: the Midlands', text:'The Midlands in the time of the Sword of Truth. I am a traveler near the old boundary while the Imperial Order\'s war spreads north. Magic, Mord-Sith, wizards and dangerous creatures are real.'},
+  {id:'keep', label:'Sword of Truth: the Wizard\'s Keep', text:'The Wizard\'s Keep above Aydindril, in the Sword of Truth world. I am exploring its endless halls, shields and forgotten libraries.'},
+  {id:'dungeon', label:'Classic dungeon crawl', text:'A torch-lit dungeon beneath a ruined castle. Monsters, traps and treasure.'},
+  {id:'scifi', label:'Derelict starship', text:'A silent derelict starship drifting at the edge of known space. Something is still aboard.'},
+  {id:'mystery', label:'Small-town mystery', text:'A rainy small town where someone has gone missing, and everyone has a secret.'},
+  {id:'custom', label:'Type my own…', text:''}
+];
+var GAME_NAMES = {trivia:'Sword of Truth trivia', twenty:'20 Questions', chess:'Chess', ttt:'Tic-tac-toe', c4:'Connect Four', story:'Story adventure', wyr:'Would You Rather'};
+
+function $g(id){ return document.getElementById(id); }
+function E(s){ return (typeof esc==='function') ? esc(s) : String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+
+var G = { game:null, started:false, busy:false, lastPrompt:null, lastHandler:null, lastKinText:'', sent:[], st:{} };
+window.KinGames = G;
+
+/* ---------- Kin selection ---------- */
+function gameChars(){ try{ return (chars()||[]).filter(function(c){ return c && c.ai_id; }); }catch(_){ return []; } }
+function currentKin(){ var id=$g('gmChar') && $g('gmChar').value; return gameChars().find(function(c){ return c.id===id; }) || null; }
+function kinName(){ var c=currentKin(); return (c && c.name) || 'Kin'; }
+function fillChars(){
+  var sel=$g('gmChar'); if(!sel) return;
+  var cs=gameChars(), cur=sel.value || (store.get('games_lastChar','')) || (store.get('lastChatChar',''));
+  sel.innerHTML = cs.length ? cs.map(function(c){ return '<option value="'+E(c.id)+'">'+E(c.name||'Kin')+'</option>'; }).join('') : '<option value="">— add a character with an AI ID —</option>';
+  if(cur && cs.some(function(c){ return c.id===cur; })) sel.value=cur;
+  paintCharHint();
+}
+function paintCharHint(){
+  var c=currentKin(), h=$g('gmCharHint'); if(!h) return;
+  if(!keyLooksGood(readApiKey())){ h.innerHTML='<span class="error">Paste the kn_ key in Settings first.</span>'; return; }
+  if(!c){ h.innerHTML='<span class="error">Add a character with a Kindroid AI ID in the Characters tab.</span>'; return; }
+  var v=null; try{ v=voiceForChar(c); }catch(_){}
+  h.textContent = (v && v.name ? 'Voice: '+v.name : 'No voice assigned — replies use the default voice') + '. Kindroid allows 10 messages every 30 seconds.';
+}
+
+/* ---------- strip / status ---------- */
+function status(msg, cls){ var s=$g('gmStatus'); if(!s) return; s.innerHTML = cls ? '<span class="'+cls+'">'+E(msg)+'</span>' : E(msg); }
+function logLine(kind, text, opts){
+  opts=opts||{}; var log=$g('gmLog'); if(!log) return;
+  if(kind==='sys'){ var p=document.createElement('div'); p.className='gm-sys'+(opts.cls?' '+opts.cls:''); p.textContent=text; log.appendChild(p); }
+  else {
+    var row=document.createElement('div'); row.className='bubble-row '+(kind==='kin'?'kin':'user');
+    var wrap=document.createElement('div'); var b=document.createElement('div'); b.className='bubble'; b.textContent=text; wrap.appendChild(b);
+    if(kind==='kin'){ var m=document.createElement('div'); m.className='bubble-meta'; var nm=document.createElement('span'); nm.textContent=kinName();
+      var hb=document.createElement('button'); hb.type='button'; hb.className='bubble-hear gm-hear'; hb.textContent='Replay';
+      hb.onclick=function(){ speak(text, true); }; m.appendChild(nm); m.appendChild(hb); wrap.appendChild(m); }
+    row.appendChild(wrap); log.appendChild(row);
+  }
+  log.scrollTop=log.scrollHeight;
+}
+function speak(text, force){
+  if(!force && !($g('gmVoice') && $g('gmVoice').checked)) return Promise.resolve();
+  var c=currentKin(); var v=null; try{ v=voiceForChar(c); }catch(_){}
+  status('Speaking…');
+  return Promise.resolve().then(function(){ return speakText(text, v); }).catch(function(){}).then(function(){ if(!G.busy) status('Your turn.'); });
+}
+function setBusy(on){ G.busy=on; var st=$g('gmStage'); if(st) st.classList.toggle('busy', !!on); }
+
+/* ---------- Kindroid calls: queue + 10 per 30 s limit + 429 + "< >" ---------- */
+var chain=Promise.resolve();
+function waitForSlot(){
+  var now=Date.now(); G.sent=G.sent.filter(function(t){ return now-t<30000; });
+  if(G.sent.length<9) return Promise.resolve();
+  var wait=30000-(now-G.sent[0])+250;
+  return countdown(wait,'Kindroid allows 10 messages every 30 seconds. Waiting').then(waitForSlot);
+}
+function countdown(ms, label){
+  ms=ms*(G.waitScale||1); var end=Date.now()+ms;
+  return new Promise(function(res){ (function tick(){ var left=Math.ceil((end-Date.now())/1000); if(left<=0){ res(); return; } status(label+' '+left+' s…','warn'); setTimeout(tick, 500); })(); });
+}
+function GenFail(msg){ var e=new Error(msg); e.genFail=true; return e; }
+function rawSend(message, attempt){
+  attempt=attempt||0;
+  var c=currentKin();
+  if(!keyLooksGood(readApiKey())) return Promise.reject(new Error('Paste the kn_ key in Settings first.'));
+  if(!c) return Promise.reject(new Error('Pick a character with a Kindroid AI ID.'));
+  return waitForSlot().then(function(){
+    G.sent.push(Date.now()); status(kinName()+' is thinking…');
+    return apiPost('/send-message', { ai_id:c.ai_id, message:message, stream:false });
+  }).then(function(raw){
+    var t = (typeof extractKindroidText==='function' ? extractKindroidText(raw) : String(raw||'')).trim();
+    if(/^<\s*>/.test(t)) throw GenFail('Kindroid could not generate a reply this time ("< >").');
+    if(!t) throw GenFail('Kindroid sent back an empty reply.');
+    return t;
+  }, function(e){
+    var msg=String((e&&e.message)||e);
+    if(/^429|\b429\b/.test(msg) && attempt<2){
+      logLine('sys','Kindroid says slow down (429). Waiting 30 seconds, then trying again.',{cls:'warn'});
+      return countdown(30000,'Rate limit — trying again in').then(function(){ return rawSend(message, attempt+1); });
+    }
+    if(/^429|\b429\b/.test(msg)) throw new Error('Kindroid is still rate limiting (429). Wait a minute, then tap Retry.');
+    throw e;
+  });
+}
+/* ask(): queue one message, show the Kin reply, speak it, hand the text to onReply. */
+function ask(message, onReply, opts){
+  opts=opts||{};
+  G.lastPrompt=message; G.lastHandler=onReply; G.lastOpts=opts;
+  if($g('gmRetry')) $g('gmRetry').hidden=true;
+  setBusy(true); G.started=true;
+  var p=chain.then(function(){ return rawSend(message); }).then(function(text){
+    G.lastKinText=text;
+    if(!opts.silent) logLine('kin', text);
+    setBusy(false); status('Your turn.');
+    var r; try{ r=onReply && onReply(text); }catch(err){ logLine('sys','Game error: '+err.message,{cls:'err'}); }
+    if(!opts.silent) speak(text);
+    return r;
+  }).catch(function(e){
+    setBusy(false);
+    logLine('sys', (e&&e.message)||String(e), {cls:'err'});
+    status('Tap Retry to send that turn again.','error');
+    if($g('gmRetry')) $g('gmRetry').hidden=false;
+    if(opts.onFail) try{ opts.onFail(e); }catch(_){}
+  });
+  chain=p.catch(function(){});
+  return p;
+}
+function retryLast(){ if(G.lastPrompt) ask(G.lastPrompt, G.lastHandler, G.lastOpts); }
+
+/* ---------- stats ---------- */
+function bumpStat(game, key){ var s=store.get('games_stats',{})||{}; s[game]=s[game]||{}; s[game][key]=(s[game][key]||0)+1; store.set('games_stats',s); }
+function statLine(game){ var s=(store.get('games_stats',{})||{})[game]||{}; var parts=[]; ['win','loss','draw'].forEach(function(k){ if(s[k]) parts.push(s[k]+' '+(k==='win'?'won':k==='loss'?'lost':'drawn')); }); return parts.join(' · '); }
+
+/* ---------- framework ---------- */
+function openGame(id){
+  if(G.game && G.started && G.game!==id && !confirm('Leave the current '+GAME_NAMES[G.game]+' game?')) return;
+  try{ stopSpeaking(); }catch(_){}
+  G.game=id; G.started=false; G.st={}; G.lastPrompt=null;
+  document.querySelectorAll('#gmPicker .gm-pick').forEach(function(b){ b.classList.toggle('on', b.dataset.game===id); });
+  $g('gmStage').hidden=false; $g('gmTitle').textContent=GAME_NAMES[id]; $g('gmLog').innerHTML=''; $g('gmScore').textContent=statLine(id); $g('gmRetry').hidden=true;
+  status(''); store.set('games_lastChar', ($g('gmChar')||{}).value||'');
+  GAMES[id].setup($g('gmArea'));
+  try{ $g('gmStage').scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){}
+}
+function endGame(){
+  var id=G.game; if(!id) return;
+  var name=GAME_NAMES[id];
+  if(G.started){
+    ask('(Game over: '+name+'. Thanks for playing — back to our normal chat now.)', function(){ G.started=false; });
+  }
+  G.game=null;
+  document.querySelectorAll('#gmPicker .gm-pick').forEach(function(b){ b.classList.remove('on'); });
+  $g('gmArea').innerHTML='<p class="hint">Game ended. Pick another game above.</p>';
+}
+function ensureReady(){
+  if(!keyLooksGood(readApiKey())){ status('Paste the kn_ key in Settings first.','error'); return false; }
+  if(!currentKin()){ status('Pick a character with a Kindroid AI ID (Characters tab).','error'); return false; }
+  return true;
+}
+function btn(label, cls, onClick){ var b=document.createElement('button'); b.type='button'; b.className='btn '+(cls||'')+' gm-act'; b.textContent=label; b.onclick=onClick; return b; }
+function el(tag, cls, html){ var e=document.createElement(tag); if(cls) e.className=cls; if(html!=null) e.innerHTML=html; return e; }
+function chipGroup(options, cur, onPick){
+  var d=el('div','chips'); options.forEach(function(o){ var b=el('button','chip'+(o.v===cur?' on':''), E(o.l)); b.type='button'; b.onclick=function(){ d.querySelectorAll('.chip').forEach(function(x){ x.classList.remove('on'); }); b.classList.add('on'); onPick(o.v); }; d.appendChild(b); }); return d;
+}
+
+/* ---------- move parsing helpers ---------- */
+function firstNumberIn(text, allowed){
+  var re=/\b(\d{1,2})\b/g, m; while((m=re.exec(text))){ var n=+m[1]; if(allowed.indexOf(n)>=0) return n; } return null;
+}
+function yesNo(text){
+  var t=String(text||'').replace(/^[\s*_"'“(]+/,'').toLowerCase();
+  if(/^(yes|yeah|yep|yup|correct|absolutely|definitely)\b/.test(t)) return 'Yes';
+  if(/^(no|nope|nah|not)\b/.test(t)) return 'No';
+  if(/^(maybe|sort of|kind of|partly|sometimes|possibly|perhaps)\b/.test(t)) return 'Maybe';
+  var m=t.slice(0,80).match(/\b(yes|no|maybe)\b/); return m ? m[1][0].toUpperCase()+m[1].slice(1) : null;
+}
+
+/* =====================================================================
+   1. SWORD OF TRUTH TRIVIA
+   ===================================================================== */
+var trivia = {
+  setup: function(area){
+    var st=G.st; st.mode=st.mode||'you'; st.len=10;
+    area.innerHTML='';
+    area.appendChild(el('p','hint',TRIVIA.length+' questions from the Sword of Truth books. Every answer was checked against the book text.'));
+    area.appendChild(chipGroup([{v:'you',l:'I answer, Kin is quizmaster'},{v:'kin',l:'Kin answers, I judge'}], st.mode, function(v){ st.mode=v; }));
+    area.appendChild(chipGroup([{v:5,l:'5 questions'},{v:10,l:'10 questions'},{v:20,l:'20 questions'}], 10, function(v){ st.len=v; }));
+    var r=el('div','row'); r.appendChild(btn('Start','',function(){ if(ensureReady()) trivia.start(); })); area.appendChild(r);
+  },
+  start: function(){
+    var st=G.st; st.deck=shuffle(TRIVIA).slice(0, st.len); st.i=0; st.score=0; st.kinScore=0;
+    G.started=true;
+    if(st.mode==='you'){
+      logLine('sys','Round of '+st.len+'. Tap an answer; '+kinName()+' reacts to each one.');
+      trivia.showQ();
+    } else {
+      logLine('sys',kinName()+' answers, you judge. The book answer is shown to you only.');
+      trivia.kinAsk(null);
+    }
+  },
+  score: function(){ var st=G.st; $g('gmScore').textContent = st.mode==='you' ? ('You '+st.score+' / '+st.i) : (kinName()+' '+st.kinScore+' / '+st.i); },
+  choicesFor: function(q){ if(!q._c) q._c=shuffle([q.a].concat(q.w)); return q._c; },
+  showQ: function(){
+    var st=G.st, q=st.deck[st.i], area=$g('gmArea'); area.innerHTML='';
+    area.appendChild(el('div','gm-book','Question '+(st.i+1)+' of '+st.deck.length+' · '+E(q.book)));
+    area.appendChild(el('div','gm-q',E(q.q)));
+    var box=el('div','gm-choices');
+    trivia.choicesFor(q).forEach(function(c, k){
+      var b=el('button','gm-choice gm-act',E('ABCD'[k]+') '+c)); b.type='button';
+      b.onclick=function(){ trivia.answer(c, box); }; box.appendChild(b);
+    });
+    area.appendChild(box); trivia.score();
+  },
+  answer: function(choice, box){
+    var st=G.st, q=st.deck[st.i], ok=choice===q.a;
+    box.querySelectorAll('.gm-choice').forEach(function(b){ var txt=b.textContent.slice(3); b.disabled=true; if(txt===q.a) b.classList.add('right'); else if(txt===choice) b.classList.add('wrong'); });
+    if(ok) st.score++; st.i++; trivia.score();
+    logLine('user', choice);
+    var last = st.i>=st.deck.length;
+    var msg='(Game: SoT Trivia — you are quizmaster) Question: '+q.q+' I answered "'+choice+'". '+(ok?'That is correct.':'That is wrong — the answer is "'+q.a+'" ('+q.book+').')+' React in one or two lines, in character.';
+    if(last) msg+=' That was the last question: I scored '+st.score+' of '+st.deck.length+'. Give me a final verdict.';
+    ask(msg, function(){
+      if(last){ trivia.finish(); return; }
+      var area=$g('gmArea'); var r=el('div','row'); r.style.marginTop='8px'; r.appendChild(btn('Next question','',function(){ trivia.showQ(); })); area.appendChild(r);
+    });
+  },
+  kinAsk: function(prevVerdict){
+    var st=G.st, q=st.deck[st.i], ch=trivia.choicesFor(q);
+    var lines=ch.map(function(c,k){ return 'ABCD'[k]+') '+c; }).join('  ');
+    var msg='(Game: SoT Trivia — your turn to answer) '+(prevVerdict?prevVerdict+' ':'')+'Question '+(st.i+1)+' of '+st.deck.length+': '+q.q+'  '+lines+'  Reply with the letter first, then any comment.';
+    var area=$g('gmArea'); area.innerHTML='';
+    area.appendChild(el('div','gm-book','Question '+(st.i+1)+' of '+st.deck.length+' · '+E(q.book)));
+    area.appendChild(el('div','gm-q',E(q.q)));
+    var box=el('div','gm-choices'); ch.forEach(function(c,k){ var b=el('button','gm-choice',E('ABCD'[k]+') '+c)); b.type='button'; b.disabled=true; box.appendChild(b); }); area.appendChild(box);
+    ask(msg, function(text){ trivia.judge(text, q, ch, box); });
+  },
+  parseLetter: function(text, ch){
+    var t=String(text||''); var m=t.match(/^[\s*_"'“(\[]*([ABCD])\s*(?:[).:\]\-—,!*]|$)/);
+    if(m) return 'ABCD'.indexOf(m[1].toUpperCase());
+    var low=t.toLowerCase(), best=-1, bestAt=1e9; for(var k=0;k<ch.length;k++){ var at=low.indexOf(ch[k].toLowerCase()); if(at>=0 && at<bestAt){ best=k; bestAt=at; } }
+    if(best>=0) return best;
+    m=t.match(/\b(?:answer|pick|choose|go with|it'?s|option|letter)\s*(?:is\s*)?\(?([ABCD])\b/) || t.match(/\b([ABCD])\)/) || t.match(/^\W*([ABCD])\b/);
+    return m ? 'ABCD'.indexOf(m[1].toUpperCase()) : -1;
+  },
+  judge: function(text, q, ch, box){
+    var st=G.st, k=trivia.parseLetter(text, ch), said=k>=0?ch[k]:null, auto= said===q.a;
+    var bs=box.querySelectorAll('.gm-choice'); bs.forEach(function(b,i){ if(ch[i]===q.a) b.classList.add('right'); else if(i===k) b.classList.add('wrong'); });
+    var area=$g('gmArea');
+    area.appendChild(el('p','hint','Book answer: <strong>'+E(q.a)+'</strong>. '+(said? E(kinName())+' picked: <strong>'+E(said)+'</strong>.' : 'Could not find a letter in the reply.')+' You judge:'));
+    var r=el('div','gm-yn');
+    var go=function(right){ st.i++; if(right) st.kinScore++; trivia.score();
+      var verdict = right ? 'You got it right!' : 'Not quite — the answer was "'+q.a+'" ('+q.book+').';
+      if(st.i>=st.deck.length){ ask('(Game: SoT Trivia) '+verdict+' That was the last one: you scored '+st.kinScore+' of '+st.deck.length+'. Any last words?', function(){ trivia.finish(); }); }
+      else trivia.kinAsk(verdict);
+    };
+    var bR=btn('Right'+(auto?' ✓':''), auto?'ok':'secondary', function(){ go(true); });
+    var bW=btn('Wrong'+(!auto?' ✓':''), !auto?'danger':'secondary', function(){ go(false); });
+    r.appendChild(bR); r.appendChild(bW); area.appendChild(r);
+  },
+  finish: function(){
+    var st=G.st, n=st.deck.length, s= st.mode==='you'?st.score:st.kinScore;
+    var res = st.mode==='you' ? (s*2>n?'win':s*2===n?'draw':'loss') : (s*2>n?'loss':s*2===n?'draw':'win');
+    bumpStat('trivia', res);
+    logLine('sys', (st.mode==='you'?'You scored ':kinName()+' scored ')+s+' of '+n+'.');
+    var area=$g('gmArea'); area.innerHTML=''; var r=el('div','row'); r.appendChild(btn('Play again','',function(){ trivia.setup($g('gmArea')); })); area.appendChild(r);
+    G.started=false;
+  }
+};
+
+/* =====================================================================
+   2. 20 QUESTIONS
+   ===================================================================== */
+var twenty = {
+  setup: function(area){
+    var st=G.st; st.mode=st.mode||'kin';
+    area.innerHTML='';
+    area.appendChild(chipGroup([{v:'kin',l:'Kin thinks, I ask'},{v:'you',l:'I think, Kin asks'}], st.mode, function(v){ st.mode=v; }));
+    area.appendChild(el('label','', 'Theme (optional)'));
+    var th=el('input'); th.id='gm20Theme'; th.placeholder='e.g. Sword of Truth characters, animals, movies'; area.appendChild(th);
+    var r=el('div','row'); r.appendChild(btn('Start','',function(){ if(ensureReady()) twenty.start((th.value||'').trim()); })); area.appendChild(r);
+  },
+  start: function(theme){
+    var st=G.st; st.n=0; st.done=false; st.theme=theme;
+    if(st.mode==='kin'){
+      ask('(Game: 20 Questions) Think of a secret '+(theme?'('+theme+') ':'')+'person, place or thing and keep it hidden. I\'ll ask yes/no questions — start every answer with Yes, No or Maybe. If I guess it, say "You got it!". Reply "Ready" when you have it.', function(){ twenty.askUI(); });
+    } else {
+      twenty.youUI();
+      ask('(Game: 20 Questions) I\'m thinking of something'+(theme?' ('+theme+')':'')+'. Ask me one yes/no question at a time — you get 20. When you want to guess, write "GUESS: your answer". Ask your first question.', function(t){ twenty.onKinQ(t); });
+    }
+  },
+  counter: function(){ $g('gmScore').textContent='Questions: '+G.st.n+' / 20'; },
+  askUI: function(){
+    var area=$g('gmArea'); area.innerHTML=''; twenty.counter();
+    var inp=el('input'); inp.id='gm20Q'; inp.placeholder='Ask a yes/no question, or "Is it …?"'; area.appendChild(inp);
+    var r=el('div','row');
+    var send=function(){ var q=(inp.value||'').trim(); if(!q) return; inp.value=''; twenty.kinQ(q); };
+    inp.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); send(); } };
+    r.appendChild(btn('Ask','',send));
+    r.appendChild(btn('I guessed it!','ok',function(){ twenty.finishKin(true); }));
+    r.appendChild(btn('Give up — reveal','secondary',function(){ twenty.reveal(); }));
+    area.appendChild(r);
+  },
+  kinQ: function(q){
+    var st=G.st; if(st.done) return; st.n++; twenty.counter(); logLine('user', q);
+    var last=st.n>=20;
+    ask('(20 Questions, question '+st.n+' of 20) '+q+(last?' — that was my last question.':''), function(t){
+      var yn=yesNo(t); if(yn) logLine('sys','Answer: '+yn);
+      if(/\b(you got it|you guessed it|that'?s it|correct!|you win|got it!)\b/i.test(t) && /^\s*(is it|was it|are you|guess)/i.test(q)){ twenty.finishKin(true); return; }
+      if(last) twenty.reveal();
+    });
+  },
+  reveal: function(){
+    var st=G.st; if(st.done) return;
+    ask('(20 Questions) Time\'s up — reveal your secret now. Start your reply with "SECRET:" and the answer.', function(t){
+      var m=t.match(/SECRET\s*:\s*([^\n.!]+)/i); if(m) logLine('sys','The secret was: '+m[1].trim());
+      twenty.finishKin(false, true);
+    });
+  },
+  finishKin: function(won, revealed){
+    var st=G.st; if(st.done) return; st.done=true; bumpStat('twenty', won?'win':'loss');
+    var area=$g('gmArea'); area.innerHTML='';
+    if(won && !revealed) ask('(20 Questions) I got it in '+st.n+' questions! React to that.', function(){});
+    logLine('sys', won ? 'You guessed it in '+st.n+' questions.' : kinName()+' stumped you.');
+    var r=el('div','row'); r.appendChild(btn('Play again','',function(){ twenty.setup($g('gmArea')); })); area.appendChild(r); G.started=false;
+  },
+  youUI: function(){
+    var area=$g('gmArea'); area.innerHTML=''; twenty.counter();
+    area.appendChild(el('p','hint','Answer each question from '+E(kinName())+'. When it makes a guess, tap Correct or Wrong.'));
+    var r=el('div','gm-yn'); r.id='gm20Ans';
+    ['Yes','No','Maybe'].forEach(function(a){ r.appendChild(btn(a, a==='Yes'?'ok':a==='No'?'danger':'secondary', function(){ twenty.answer(a); })); });
+    area.appendChild(r);
+    var g=el('div','gm-yn'); g.id='gm20Guess'; g.hidden=true;
+    g.appendChild(btn('Correct — you got it','ok',function(){ twenty.guessResult(true); }));
+    g.appendChild(btn('Wrong guess','danger',function(){ twenty.guessResult(false); }));
+    area.appendChild(g);
+  },
+  onKinQ: function(t){
+    var st=G.st; if(st.done) return;
+    var isGuess=/GUESS\s*:/i.test(t);
+    st.n++; twenty.counter();
+    $g('gm20Guess').hidden=!isGuess; $g('gm20Ans').hidden=isGuess;
+    if(isGuess){ var m=t.match(/GUESS\s*:\s*([^\n]+)/i); logLine('sys','Guess: '+(m?m[1].trim():'?')); }
+    if(st.n>20 && !isGuess){ twenty.youWin(); }
+  },
+  answer: function(a){
+    var st=G.st; logLine('user', a);
+    if(st.n>=20){ ask('(20 Questions) '+a+'. That was your 20th question — make your final guess: "GUESS: …"', function(t){ twenty.onKinQ(t); if(!/GUESS\s*:/i.test(t)) twenty.youWin(); }); return; }
+    ask('(20 Questions, '+st.n+' of 20 used) '+a+'.', function(t){ twenty.onKinQ(t); });
+  },
+  guessResult: function(right){
+    var st=G.st; logLine('user', right?'Correct!':'Wrong.');
+    if(right){ st.done=true; bumpStat('twenty','loss'); ask('(20 Questions) Correct! You got it in '+st.n+' questions.', function(){ twenty.endYou(kinName()+' guessed it in '+st.n+'.'); }); return; }
+    if(st.n>=20){ twenty.youWin(); return; }
+    ask('(20 Questions, '+st.n+' of 20 used) No, that\'s not it. Keep going.', function(t){ twenty.onKinQ(t); });
+  },
+  youWin: function(){
+    var st=G.st; if(st.done) return; st.done=true; bumpStat('twenty','win');
+    var area=$g('gmArea'); area.innerHTML='';
+    area.appendChild(el('label','','What were you thinking of?'));
+    var inp=el('input'); area.appendChild(inp);
+    var r=el('div','row'); r.appendChild(btn('Tell '+kinName(),'',function(){ var s=(inp.value||'').trim()||'a secret'; logLine('user', s); ask('(20 Questions) Out of questions — I win! I was thinking of: '+s+'.', function(){ twenty.endYou('You stumped '+kinName()+'.'); }); })); area.appendChild(r);
+  },
+  endYou: function(msg){ logLine('sys', msg); var area=$g('gmArea'); area.innerHTML=''; var r=el('div','row'); r.appendChild(btn('Play again','',function(){ twenty.setup($g('gmArea')); })); area.appendChild(r); G.started=false; }
+};
+
+/* =====================================================================
+   Shared "board game vs Kin" move protocol: legal list → parse → re-ask once → random fallback
+   ===================================================================== */
+function kinMove(o){
+  // o: {prompt, legalText, parse(text)->move|null, apply(move, how), name}
+  ask(o.prompt, function(text){
+    var mv=o.parse(text);
+    if(mv!=null){ o.apply(mv,'kin'); return; }
+    logLine('sys','No legal move found in that reply — asking once more.',{cls:'warn'});
+    ask('('+o.name+') I couldn\'t find a legal move in that. Choose exactly one of: '+o.legalText()+'. Reply with just the move.', function(t2){
+      var mv2=o.parse(t2);
+      if(mv2!=null){ o.apply(mv2,'kin'); return; }
+      var r=o.random(); logLine('sys','Still no legal move — the app played a random legal move for '+kinName()+': '+o.label(r)+'.',{cls:'warn'});
+      o.apply(r,'random');
+    });
+  }, { onFail: function(){ var area=$g('gmArea'); if(area && !area.querySelector('.gm-randbtn')){ var r=el('div','row gm-randbtn'); r.appendChild(btn('Play a random move for '+kinName(),'secondary',function(){ r.remove(); var m=o.random(); logLine('sys','Random move for '+kinName()+': '+o.label(m)+'.',{cls:'warn'}); o.apply(m,'random'); })); area.appendChild(r); } } });
+}
+
+/* =====================================================================
+   3. CHESS
+   ===================================================================== */
+var GLYPH={K:'\u2654',Q:'\u2655',R:'\u2656',B:'\u2657',N:'\u2658',P:'\u2659',k:'\u265A',q:'\u265B',r:'\u265C',b:'\u265D',n:'\u265E',p:'\u265F'};
+var chess = {
+  setup: function(area){
+    var st=G.st; st.side=st.side||'w';
+    area.innerHTML='';
+    area.appendChild(chipGroup([{v:'w',l:'I play White'},{v:'b',l:'I play Black'}], st.side, function(v){ st.side=v; }));
+    var r=el('div','row'); r.appendChild(btn('New game','',function(){ if(ensureReady()) chess.start(); })); area.appendChild(r);
+  },
+  start: function(){
+    var st=G.st; st.g=new KinChess.Game(); st.sel=null; st.last=null; st.over=false; st.promo='Q';
+    G.started=true; chess.draw();
+    logLine('sys','You are '+(st.side==='w'?'White':'Black')+'. Tap a piece, then a square.');
+    if(st.side==='b') chess.kinTurn(null);
+  },
+  draw: function(){
+    var st=G.st, g=st.g, area=$g('gmArea'); area.innerHTML='';
+    var board=el('div','gm-board'); board.id='gmBoard';
+    var legal = (!st.over && g.turn===st.side) ? g.moves() : [];
+    var targets = st.sel!=null ? legal.filter(function(m){ return KinChess.sqName(m.from)===st.sel; }).map(function(m){ return KinChess.sqName(m.to); }) : [];
+    var chk = g.inCheck() ? KinChess.sqName(g.kingSq(g.turn)) : null;
+    for(var vi=0; vi<64; vi++){
+      var i = st.side==='w' ? vi : 63-vi; var name=KinChess.sqName(i), p=g.b[i];
+      var sq=el('button','gm-sq gm-act '+((((i>>3)+(i&7))%2)?'d':'l')); sq.type='button'; sq.dataset.sq=name; sq.setAttribute('aria-label', name+(p?' '+p:''));
+      if(p) sq.innerHTML='<span class="'+(p===p.toUpperCase()?'pw':'pb')+'">'+GLYPH[p.toLowerCase()]+'\uFE0E</span>';
+      if(name===st.sel) sq.classList.add('sel');
+      if(st.last && (name===st.last.from||name===st.last.to)) sq.classList.add('last');
+      if(targets.indexOf(name)>=0) sq.classList.add('tgt');
+      if(name===chk) sq.classList.add('chk');
+      if((st.side==='w' && name[1]==='1') || (st.side==='b' && name[1]==='8')) sq.insertAdjacentHTML('beforeend','<span class="gm-coord">'+name[0]+'</span>');
+      sq.onclick=(function(n){ return function(){ chess.tap(n); }; })(name);
+      board.appendChild(sq);
+    }
+    area.appendChild(board);
+    var info=el('p','hint'); info.id='gmChessInfo';
+    var s=g.status();
+    info.textContent = st.over ? st.overText : (s.check?'Check! ':'') + (g.turn===st.side ? 'Your move.' : kinName()+' to move.');
+    area.appendChild(info);
+    var r=el('div','row');
+    var pr=el('select'); pr.innerHTML='<option value="Q">Promote: Queen</option><option value="R">Promote: Rook</option><option value="B">Promote: Bishop</option><option value="N">Promote: Knight</option>'; pr.title='Pawn promotion piece'; pr.value=st.promo; pr.onchange=function(){ st.promo=pr.value; }; pr.style.cssText='margin:0;flex:1 1 160px';
+    r.appendChild(pr);
+    r.appendChild(btn('Resign','secondary',function(){ if(st.over) return; if(confirm('Resign this game?')) chess.finish('loss','You resigned.', '(Game: Chess) I resign — you win! Moves: '+g.pgn()); }));
+    r.appendChild(btn('New game','secondary',function(){ chess.setup($g('gmArea')); }));
+    area.appendChild(r);
+    $g('gmScore').textContent = g.pgn().split(' ').slice(-6).join(' ');
+  },
+  tap: function(name){
+    var st=G.st, g=st.g; if(st.over || G.busy || g.turn!==st.side) return;
+    var p=g.b[KinChess.sqIdx(name)];
+    if(st.sel && st.sel!==name){
+      var mv=g.moves().find(function(m){ return KinChess.sqName(m.from)===st.sel && KinChess.sqName(m.to)===name && (!m.promo || m.promo===st.promo); });
+      if(mv){ var done=g.move({from:st.sel,to:name,promo:st.promo}); st.sel=null; st.last=done; logLine('user', done.san); chess.draw(); if(!chess.checkEnd(done.san,'me')) chess.kinTurn(done.san); return; }
+    }
+    st.sel = (p && ((p===p.toUpperCase())===(st.side==='w'))) ? (st.sel===name?null:name) : null;
+    chess.draw();
+  },
+  kinTurn: function(myMove){
+    var st=G.st, g=st.g;
+    var legal=g.moves(), sans=legal.map(function(m){ return m.san; });
+    var me=st.side==='w'?'White':'Black', you=st.side==='w'?'Black':'White';
+    var prompt='(Game: Chess) I\'m '+me+', you\'re '+you+'. '+(myMove?'I played '+myMove+'. ':'New game — you move first. ')+'FEN: '+g.fen()+'. Moves so far: '+(g.pgn()||'none')+'. Your legal moves: '+sans.join(', ')+'. Reply with your move in standard notation first, then any comment.';
+    kinMove({ name:'Chess', prompt:prompt, legalText:function(){ return sans.join(', '); },
+      parse:function(t){ return chess.parse(t, legal); },
+      random:function(){ return pick(legal).san; }, label:function(m){ return m; },
+      apply:function(san){ var done=g.move(san); st.last=done; logLine('sys',kinName()+' played '+done.san+'.'); chess.draw(); chess.checkEnd(done.san,'kin'); } });
+  },
+  parse: function(text, legal){
+    var t=String(text||'');
+    var bySan={}, byUci={}; legal.forEach(function(m){ bySan[KinChess.norm(m.san)]=m.san; byUci[KinChess.sqName(m.from)+KinChess.sqName(m.to)+(m.promo&&m.promo!=='Q'?m.promo.toLowerCase():'')]=m.san; if(m.promo==='Q') byUci[KinChess.sqName(m.from)+KinChess.sqName(m.to)+'q']=m.san; });
+    var pn=t.match(/\b(knight|bishop|rook|queen|king)\s+(?:to\s+|takes\s+(?:on\s+)?|on\s+)?([a-h][1-8])\b/i);
+    if(pn){ var L={knight:'N',bishop:'B',rook:'R',queen:'Q',king:'K'}[pn[1].toLowerCase()], to=pn[2].toLowerCase(); var cand=legal.filter(function(m){ return m.piece.toUpperCase()===L && KinChess.sqName(m.to)===to; }); if(cand.length===1) return cand[0].san; }
+    var mc=t.match(/castl\w*\s+(king|queen)\s*-?side|(king|queen)\s*-?side\s+castl/i);
+    var toks=t.replace(/[“”"'`*_()\[\]{},;:]/g,' ').split(/\s+/).filter(Boolean);
+    for(var i=0;i<toks.length;i++){
+      var tok=toks[i].replace(/^[.…]+|[.…!?]+$/g,'').replace(/^\d+\.+/,'');
+      if(!tok) continue;
+      var n=KinChess.norm(tok); if(bySan[n]) return bySan[n];
+      var n2=n.replace(/^([nbrqk])/,function(a){ return a.toUpperCase(); }); if(n2!==n && /^[NRQK]/.test(n2) && bySan[n2]) return bySan[n2];
+      if(/^b[a-h]?x?[a-h][1-8]/.test(n) && bySan['B'+n.slice(1)] && !bySan[n]) return bySan['B'+n.slice(1)];
+      var u=tok.toLowerCase().replace(/[-x]/g,''); if(byUci[u]) return byUci[u];
+    }
+    var sq=t.match(/\b([a-h][1-8])\s*(?:-|to|x|takes)\s*([a-h][1-8])\b/i); if(sq){ var k=(sq[1]+sq[2]).toLowerCase(); if(byUci[k]) return byUci[k]; }
+    if(mc){ var side=(mc[1]||mc[2]).toLowerCase(); var c=side==='king'?'O-O':'O-O-O'; if(bySan[c]) return bySan[c]; }
+    return null;
+  },
+  checkEnd: function(san, who){
+    var st=G.st, g=st.g, s=g.status(); if(!s.over) return false;
+    var mine = s.winner===st.side, txt;
+    if(s.result==='checkmate'){ txt = mine ? 'Checkmate — you win!' : 'Checkmate — '+kinName()+' wins.'; chess.finish(mine?'win':'loss', txt, '(Game: Chess) '+(mine?'I played '+san+' — checkmate, I win!':'Your '+san+' is checkmate — you win!')+' Moves: '+g.pgn()+'. Say something about the game.'); }
+    else { txt='Draw by '+s.result+'.'; chess.finish('draw', txt, '(Game: Chess) '+(who==='me'?'I played '+san+'. ':'')+'The game is a draw by '+s.result+'. Moves: '+g.pgn()+'.'); }
+    return true;
+  },
+  finish: function(res, txt, msg){ var st=G.st; st.over=true; st.overText=txt; bumpStat('chess',res); logLine('sys',txt); chess.draw(); ask(msg, function(){ G.started=false; }); }
+};
+
+/* =====================================================================
+   4a. TIC-TAC-TOE
+   ===================================================================== */
+var LINES3=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+var ttt = {
+  setup: function(area){ var st=G.st; st.first=st.first||'me'; area.innerHTML='';
+    area.appendChild(el('p','hint','You are X, '+E(kinName())+' is O.'));
+    area.appendChild(chipGroup([{v:'me',l:'I go first'},{v:'kin',l:'Kin goes first'}], st.first, function(v){ st.first=v; }));
+    var r=el('div','row'); r.appendChild(btn('New game','',function(){ if(ensureReady()) ttt.start(); })); area.appendChild(r); },
+  start: function(){ var st=G.st; st.b=Array(9).fill(''); st.over=false; G.started=true; ttt.draw(); if(st.first==='kin') ttt.kinTurn(null); },
+  open: function(){ var o=[]; G.st.b.forEach(function(v,i){ if(!v) o.push(i+1); }); return o; },
+  winner: function(b){ for(var i=0;i<8;i++){ var l=LINES3[i]; if(b[l[0]] && b[l[0]]===b[l[1]] && b[l[1]]===b[l[2]]) return {w:b[l[0]], line:l}; } return b.every(Boolean)?{w:'draw'}:null; },
+  boardText: function(){ var b=G.st.b; var c=function(i){ return b[i]||String(i+1); }; return c(0)+' '+c(1)+' '+c(2)+' / '+c(3)+' '+c(4)+' '+c(5)+' / '+c(6)+' '+c(7)+' '+c(8); },
+  draw: function(){ var st=G.st, area=$g('gmArea'); area.innerHTML='';
+    var w=ttt.winner(st.b); var grid=el('div','gm-ttt');
+    st.b.forEach(function(v,i){ var b=el('button','gm-act'+(w&&w.line&&w.line.indexOf(i)>=0?' win':''), v?E(v):'<span class="n">'+(i+1)+'</span>'); b.type='button'; b.onclick=function(){ ttt.tap(i); }; grid.appendChild(b); });
+    area.appendChild(grid);
+    var r=el('div','row'); r.appendChild(btn('New game','secondary',function(){ ttt.setup($g('gmArea')); })); area.appendChild(r); },
+  tap: function(i){ var st=G.st; if(st.over||G.busy||st.b[i]) return; st.b[i]='X'; logLine('user','Square '+(i+1)); ttt.draw(); if(!ttt.checkEnd('me', i+1)) ttt.kinTurn(i+1); },
+  kinTurn: function(my){ var st=G.st, open=ttt.open();
+    kinMove({ name:'Tic-tac-toe', prompt:'(Game: Tic-tac-toe) I\'m X, you\'re O. '+(my?'I took square '+my+'. ':'You go first. ')+'Board (squares 1-9, left to right, top to bottom): '+ttt.boardText()+'. Open squares: '+open.join(', ')+'. Reply with the number of your square first, then any comment.',
+      legalText:function(){ return open.join(', '); }, parse:function(t){ return firstNumberIn(t, open); }, random:function(){ return pick(open); }, label:function(n){ return 'square '+n; },
+      apply:function(n){ st.b[n-1]='O'; logLine('sys',kinName()+' took square '+n+'.'); ttt.draw(); ttt.checkEnd('kin', n); } }); },
+  checkEnd: function(who, sq){ var st=G.st, w=ttt.winner(st.b); if(!w) return false; st.over=true;
+    var res = w.w==='draw'?'draw':(w.w==='X'?'win':'loss'); bumpStat('ttt',res); ttt.draw();
+    var txt = res==='draw'?'Draw!':res==='win'?'You win!':kinName()+' wins.'; logLine('sys',txt); $g('gmScore').textContent=statLine('ttt');
+    ask('(Game: Tic-tac-toe) '+(who==='me'?'I took square '+sq+'. ':'')+(res==='draw'?'It\'s a draw.':res==='win'?'Three in a row — I win!':'You got three in a row — you win!')+' Final board: '+ttt.boardText()+'.', function(){ G.started=false; });
+    return true; }
+};
+
+/* =====================================================================
+   4b. CONNECT FOUR (6 rows x 7 columns; row 0 = top)
+   ===================================================================== */
+var c4 = {
+  setup: function(area){ var st=G.st; st.first=st.first||'me'; area.innerHTML='';
+    area.appendChild(el('p','hint','You are red (X), '+E(kinName())+' is yellow (O). Tap a column to drop.'));
+    area.appendChild(chipGroup([{v:'me',l:'I go first'},{v:'kin',l:'Kin goes first'}], st.first, function(v){ st.first=v; }));
+    var r=el('div','row'); r.appendChild(btn('New game','',function(){ if(ensureReady()) c4.start(); })); area.appendChild(r); },
+  start: function(){ var st=G.st; st.b=[]; for(var r=0;r<6;r++) st.b.push(Array(7).fill('')); st.over=false; st.win=null; G.started=true; c4.draw(); if(st.first==='kin') c4.kinTurn(null); },
+  open: function(){ var o=[]; for(var c=0;c<7;c++) if(!G.st.b[0][c]) o.push(c+1); return o; },
+  drop: function(col, who){ var b=G.st.b; for(var r=5;r>=0;r--){ if(!b[r][col]){ b[r][col]=who; return r; } } return -1; },
+  winner: function(){ var b=G.st.b, dirs=[[0,1],[1,0],[1,1],[1,-1]];
+    for(var r=0;r<6;r++) for(var c=0;c<7;c++){ var v=b[r][c]; if(!v) continue;
+      for(var d=0;d<4;d++){ var cells=[[r,c]]; for(var k=1;k<4;k++){ var rr=r+dirs[d][0]*k, cc=c+dirs[d][1]*k; if(rr<0||rr>5||cc<0||cc>6||b[rr][cc]!==v) break; cells.push([rr,cc]); } if(cells.length===4) return {w:v,cells:cells}; } }
+    return c4.open().length ? null : {w:'draw'}; },
+  boardText: function(){ return G.st.b.map(function(row){ return row.map(function(v){ return v||'.'; }).join(''); }).join(' / '); },
+  draw: function(){ var st=G.st, area=$g('gmArea'); area.innerHTML='';
+    var h=el('div','gm-c4h'); for(var c=0;c<7;c++) h.appendChild(el('span','',String(c+1))); area.appendChild(h);
+    var grid=el('div','gm-c4'); var win=st.win&&st.win.cells?st.win.cells.map(function(x){ return x[0]+','+x[1]; }):[];
+    for(var r=0;r<6;r++) for(c=0;c<7;c++){ var v=st.b[r][c]; var b=el('button','cell gm-act'+(v==='X'?' x':v==='O'?' o':'')+(win.indexOf(r+','+c)>=0?' win':'')); b.type='button'; b.setAttribute('aria-label','Column '+(c+1)); b.onclick=(function(cc){ return function(){ c4.tap(cc); }; })(c); grid.appendChild(b); }
+    area.appendChild(grid);
+    var rr=el('div','row'); rr.appendChild(btn('New game','secondary',function(){ c4.setup($g('gmArea')); })); area.appendChild(rr); },
+  tap: function(c){ var st=G.st; if(st.over||G.busy||st.b[0][c]) return; c4.drop(c,'X'); logLine('user','Column '+(c+1)); c4.draw(); if(!c4.checkEnd('me', c+1)) c4.kinTurn(c+1); },
+  kinTurn: function(my){ var st=G.st, open=c4.open();
+    kinMove({ name:'Connect Four', prompt:'(Game: Connect Four) I\'m X, you\'re O. '+(my?'I dropped in column '+my+'. ':'You go first. ')+'Board, top row first (. = empty, columns 1-7): '+c4.boardText()+'. Open columns: '+open.join(', ')+'. Reply with your column number first, then any comment.',
+      legalText:function(){ return open.join(', '); }, parse:function(t){ var m=String(t).match(/column\s*(\d)/i); if(m && open.indexOf(+m[1])>=0) return +m[1]; return firstNumberIn(t, open); }, random:function(){ return pick(open); }, label:function(n){ return 'column '+n; },
+      apply:function(n){ c4.drop(n-1,'O'); logLine('sys',kinName()+' dropped in column '+n+'.'); c4.draw(); c4.checkEnd('kin', n); } }); },
+  checkEnd: function(who, col){ var st=G.st, w=c4.winner(); if(!w) return false; st.over=true; st.win=w;
+    var res = w.w==='draw'?'draw':(w.w==='X'?'win':'loss'); bumpStat('c4',res); c4.draw();
+    var txt = res==='draw'?'Board full — draw.':res==='win'?'Four in a row — you win!':kinName()+' wins.'; logLine('sys',txt); $g('gmScore').textContent=statLine('c4');
+    ask('(Game: Connect Four) '+(who==='me'?'I dropped in column '+col+'. ':'')+(res==='draw'?'The board is full — draw.':res==='win'?'Four in a row — I win!':'You got four in a row — you win!'), function(){ G.started=false; });
+    return true; }
+};
+
+/* =====================================================================
+   5. STORY ADVENTURE (Kin is game master)
+   ===================================================================== */
+var story = {
+  setup: function(area){
+    var st=G.st; area.innerHTML='';
+    area.appendChild(el('label','','Setting'));
+    var sel=el('select'); sel.id='gmStorySet'; sel.innerHTML=STORY_SETTINGS.map(function(s){ return '<option value="'+s.id+'">'+E(s.label)+'</option>'; }).join(''); area.appendChild(sel);
+    var custom=el('textarea'); custom.id='gmStoryCustom'; custom.rows=2; custom.placeholder='Describe your own setting'; custom.hidden=true; area.appendChild(custom);
+    sel.onchange=function(){ custom.hidden = sel.value!=='custom'; };
+    area.appendChild(el('label','','Your character'));
+    var who=el('input'); who.id='gmStoryWho'; who.placeholder='e.g. a young woods guide from Hartland'; area.appendChild(who);
+    var r=el('div','row'); r.appendChild(btn('Begin adventure','',function(){ if(!ensureReady()) return;
+      var s=STORY_SETTINGS.find(function(x){ return x.id===sel.value; }); var text = sel.value==='custom' ? (custom.value||'').trim() : s.text;
+      if(!text){ status('Describe your setting first.','error'); return; }
+      story.start(text, (who.value||'').trim()); })); area.appendChild(r);
+  },
+  start: function(setting, who){
+    var st=G.st; st.hp=10; st.max=10; st.inv=['traveler\'s pack','waterskin']; st.turn=0; st.choices=[];
+    G.started=true; story.draw();
+    ask('(Game: Story adventure — you are the game master) Setting: '+setting+' My character: '+(who||'a lone traveler')+'. I start with 10/10 health and: '+st.inv.join(', ')+'. Describe the opening scene in under 150 words, then end every turn with 2 to 4 numbered choices (1. … 2. …). If my health or items change, add tags like [HP -2], [HP +1], [ITEM +rope] or [ITEM -rope].', story.onGM);
+  },
+  onGM: function(text){
+    var st=G.st; st.turn++;
+    var hp=text.match(/\[HP\s*([+-]\s*\d+)\]/gi)||[]; hp.forEach(function(tag){ var n=parseInt(tag.replace(/[^\d+-]/g,''),10); if(!isNaN(n)){ st.hp=Math.max(0,Math.min(st.max,st.hp+n)); logLine('sys','Health '+(n>0?'+':'')+n+' → '+st.hp+'/'+st.max); } });
+    var it=text.match(/\[ITEM\s*([+-])\s*([^\]]+)\]/gi)||[]; it.forEach(function(tag){ var m=tag.match(/\[ITEM\s*([+-])\s*([^\]]+)\]/i); var name=m[2].trim(); if(m[1]==='+'){ st.inv.push(name); logLine('sys','Gained: '+name); } else { var i=st.inv.findIndex(function(x){ return x.toLowerCase()===name.toLowerCase(); }); if(i>=0) st.inv.splice(i,1); logLine('sys','Lost: '+name); } });
+    st.choices=story.parseChoices(text);
+    story.draw();
+    if(st.hp<=0) logLine('sys','Your health is at 0. Ask the game master what happens, or end the game.',{cls:'warn'});
+  },
+  parseChoices: function(text){
+    var out=[], seen={}; String(text).split(/\n/).forEach(function(line){ var m=line.match(/^\s*(?:[*_#>\-]\s*)*\(?([1-4])[.):]\s*(?:\*\*)?\s*(.+?)\s*(?:\*\*)?\s*$/); if(m && !seen[m[1]] && m[2].length>1){ seen[m[1]]=1; out.push({n:+m[1], t:m[2].replace(/\*+/g,'').trim()}); } });
+    if(out.length<2){ out=[]; var re=/(?:^|\s)([1-4])[.)]\s+([^\n]+?)(?=\s+[1-4][.)]\s|$)/g, m; while((m=re.exec(text))){ if(!seen[m[1]]){ seen[m[1]]=1; out.push({n:+m[1], t:m[2].trim()}); } } }
+    return out.slice(0,4);
+  },
+  status: function(){ var st=G.st; return '[HP '+st.hp+'/'+st.max+' | Items: '+(st.inv.length?st.inv.join(', '):'none')+']'; },
+  act: function(text, label){ var st=G.st; logLine('user', label||text); ask('(Story, turn '+(st.turn+1)+') '+text+' '+story.status(), story.onGM); },
+  draw: function(){
+    var st=G.st, area=$g('gmArea'); area.innerHTML='';
+    var hp=el('div','gm-hp'); hp.innerHTML='<span>Health '+st.hp+'/'+st.max+'</span><span class="bar"><i style="width:'+(100*st.hp/st.max)+'%"></i></span>';
+    var minus=el('button','gm-act','−'); minus.type='button'; minus.setAttribute('aria-label','Lose 1 health'); minus.onclick=function(){ st.hp=Math.max(0,st.hp-1); story.draw(); };
+    var plus=el('button','gm-act','+'); plus.type='button'; plus.setAttribute('aria-label','Gain 1 health'); plus.onclick=function(){ st.hp=Math.min(st.max,st.hp+1); story.draw(); };
+    hp.appendChild(minus); hp.appendChild(plus); area.appendChild(hp);
+    var inv=el('div','gm-inv'); st.inv.forEach(function(name,i){ var c=el('span','chip',E(name)); var x=el('button','', '×'); x.type='button'; x.setAttribute('aria-label','Remove '+name); x.onclick=function(){ st.inv.splice(i,1); story.draw(); }; c.appendChild(x); inv.appendChild(c); });
+    var add=el('input'); add.placeholder='Add item'; add.style.cssText='width:auto;flex:1 1 120px;margin:0;padding:6px 10px;font-size:14px';
+    add.onkeydown=function(e){ if(e.key==='Enter' && add.value.trim()){ st.inv.push(add.value.trim()); story.draw(); } };
+    inv.appendChild(add); area.appendChild(inv);
+    if(st.choices && st.choices.length){ var ch=el('div','gm-choices'); st.choices.forEach(function(c){ var b=el('button','gm-choice gm-act',E(c.n+'. '+c.t)); b.type='button'; b.onclick=function(){ story.act('I choose '+c.n+': '+c.t+'.', c.n+'. '+c.t); }; ch.appendChild(b); }); area.appendChild(ch); }
+    var ta=el('input'); ta.id='gmStoryFree'; ta.placeholder='Or type what you do…'; ta.style.marginTop='8px'; area.appendChild(ta);
+    var send=function(){ var v=(ta.value||'').trim(); if(!v) return; ta.value=''; story.act(v); };
+    ta.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); send(); } };
+    var r=el('div','row'); r.appendChild(btn('Do it','',send)); area.appendChild(r);
+    $g('gmScore').textContent='Turn '+st.turn;
+  }
+};
+
+/* =====================================================================
+   6. WOULD YOU RATHER
+   ===================================================================== */
+var wyr = {
+  setup: function(area){ var st=G.st; st.deck=shuffle(WYR_BUILTIN); st.i=0; st.match=0; st.rounds=0; area.innerHTML='';
+    area.appendChild(el('p','hint','Pick one. '+E(kinName())+' picks too and explains. Or let '+E(kinName())+' make one up.'));
+    var r=el('div','row'); r.appendChild(btn('Start','',function(){ if(ensureReady()){ G.started=true; wyr.show(st.deck[st.i++ % st.deck.length], 'app'); } })); area.appendChild(r); },
+  show: function(pair, src){
+    var st=G.st, area=$g('gmArea'); area.innerHTML=''; st.cur=pair; st.src=src;
+    area.appendChild(el('div','gm-q','Would you rather…'));
+    var g=el('div','gm-wyr'); g.id='gmWyr';
+    ['A','B'].forEach(function(L,k){ var b=el('button','gm-act','<strong>'+L+'.</strong> '+E(pair[k])); b.type='button'; b.dataset.k=k; b.onclick=function(){ wyr.choose(k); }; g.appendChild(b); });
+    area.appendChild(g);
+    var r=el('div','row'); r.appendChild(btn('Next','secondary',function(){ wyr.show(st.deck[st.i++ % st.deck.length],'app'); }));
+    r.appendChild(btn(kinName()+' makes one','secondary',function(){ wyr.kinMakes(); })); area.appendChild(r);
+    $g('gmScore').textContent = st.rounds ? ('Same pick '+st.match+' of '+st.rounds) : '';
+  },
+  choose: function(k){
+    var st=G.st, p=st.cur, L='AB'[k]; var bs=document.querySelectorAll('#gmWyr button'); bs.forEach(function(b){ b.classList.toggle('me', +b.dataset.k===k); b.disabled=true; });
+    logLine('user', L+'. '+p[k]);
+    var msg = st.src==='kin' ? '(Would You Rather) I pick '+L+': '+p[k]+'. React to my pick.' : '(Game: Would You Rather) Would you rather A: '+p[0]+', or B: '+p[1]+'? I picked '+L+'. Your pick — reply with A or B first, then why.';
+    ask(msg, function(t){
+      if(st.src==='kin'){ var kp=st.kinPick; if(kp!=null){ st.rounds++; if(kp===k) st.match++; } }
+      else { var m=String(t).match(/^[\s*_"'“(\[]*(?:option\s*)?([AB])\s*(?:[).:\]\-—,!*]|$)/) || String(t).match(/\b(?:pick|choose|go with|take|prefer)\s+(?:option\s*)?\(?([AB])\b/) || String(t).match(/^[\s*_"'“(]*(?:option\s*)?([AB])\b(?!\s+[a-z])/); var kk=m?'AB'.indexOf(m[1].toUpperCase()):-1; if(kk<0){ var low=t.toLowerCase(); if(low.indexOf(p[0].toLowerCase().slice(0,24))>=0) kk=0; else if(low.indexOf(p[1].toLowerCase().slice(0,24))>=0) kk=1; }
+        if(kk>=0){ st.rounds++; if(kk===k) st.match++; document.querySelectorAll('#gmWyr button').forEach(function(b){ if(+b.dataset.k===kk) b.classList.add('kin'); }); logLine('sys', kinName()+' picked '+'AB'[kk]+(kk===k?' — same as you!':' — different from you.')); } }
+      $g('gmScore').textContent='Same pick '+st.match+' of '+st.rounds;
+    });
+  },
+  kinMakes: function(){
+    var st=G.st; logLine('user','Your turn to ask one.');
+    ask('(Game: Would You Rather) Make up a new Would You Rather question for me. Format it exactly as two lines: "A: …" and "B: …". Then say which one you would pick.', function(t){
+      var a=String(t).match(/(?:^|\n|\s)\**A\**\s*[:.)]\s*\**([^\n]+)/), b=String(t).match(/(?:^|\n|\s)\**B\**\s*[:.)]\s*\**([^\n]+)/);
+      if(a && b){ var pa=a[1].replace(/\*+/g,'').trim(), pb=b[1].replace(/\*+/g,'').trim();
+        var after=t.slice(t.indexOf(b[0])+b[0].length); var m=after.match(/\b(?:pick|choose|go with|take|prefer|I'?d\s+(?:pick|choose|take|go with))\s+(?:option\s*)?\(?([AB])\b/i); st.kinPick=m?'AB'.indexOf(m[1].toUpperCase()):null;
+        wyr.show([pa,pb],'kin'); if(st.kinPick!=null) document.querySelectorAll('#gmWyr button').forEach(function(b){ if(+b.dataset.k===st.kinPick) b.classList.add('kin'); });
+      } else logLine('sys','Could not read an A/B question in that reply. Tap "'+kinName()+' makes one" again or Next.',{cls:'warn'});
+    });
+  }
+};
+
+var GAMES={trivia:trivia, twenty:twenty, chess:chess, ttt:ttt, c4:c4, story:story, wyr:wyr};
+G.GAMES=GAMES; G.parse={chess:chess.parse, yesNo:yesNo, choices:story.parseChoices, letter:trivia.parseLetter};
+
+/* ---------- wire up ---------- */
+function init(){
+  if(!$g('p-games')) return;
+  document.querySelectorAll('#gmPicker .gm-pick').forEach(function(b){ b.onclick=function(){ openGame(b.dataset.game); }; });
+  $g('gmChar').onchange=function(){ store.set('games_lastChar',$g('gmChar').value); paintCharHint(); };
+  $g('gmRetry').onclick=retryLast;
+  $g('gmReplay').onclick=function(){ if(G.lastKinText) speak(G.lastKinText, true); else status('Nothing to replay yet.'); };
+  $g('gmStopVoice').onclick=function(){ try{ stopSpeaking(); }catch(_){} status(''); };
+  $g('gmEnd').onclick=endGame;
+  var tab=document.querySelector('.tab[data-p="games"]'); if(tab) tab.addEventListener('click', fillChars);
+  fillChars();
+}
+init();
+})();
+
+</script>
+<script src="/archive.js"></script>
 </body>
 </html>
