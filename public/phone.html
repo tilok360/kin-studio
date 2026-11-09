@@ -213,6 +213,12 @@ html.windows-app .sheet-card{border-radius:16px}
 .pk-raise input{flex:1 1 90px;margin:0;min-height:46px}
 @media(max-width:400px){.pk-card{width:42px;height:60px}}
 
+/* ---- Stump the Kindroid ---- */
+.gm-stump-q{margin:6px 0 10px;font-size:1.08rem;font-weight:650;line-height:1.35}
+.gm-stump-ans{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gm-stump-ans .btn.span{grid-column:1/-1}
+.gm-stump-log{white-space:pre-wrap;background:#12151a;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:.88rem;line-height:1.45;margin:0 0 10px;max-height:180px;overflow:auto}
+
 #gmStage.busy .gm-act{opacity:.55;pointer-events:none}
 html.windows-app .gm-picker .gm-pick{min-height:56px}
 
@@ -611,7 +617,7 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
     <p class="hint"><strong>Windows</strong> — tap Windows and open <strong>Kin-Studio.exe</strong>. It is its own window. Not a Chrome tab. Not Edge.</p>
     <p class="hint"><strong>Guide</strong> — this page<br>
     <p class="hint"><strong>Chat</strong> — 1:1 send, listen, rewind. History loads the old thread so Replay works on past lines. Import the Kindroid chat-exporter JSON if you already downloaded it.<br>
-    <strong>Games</strong> — play against your Kin: trivia, 20 questions, chess, Texas Hold'em and more.<br>
+    <strong>Games</strong> — play against your Kin: trivia, 20 questions, chess, Texas Hold'em, Stump the Kindroid and more.<br>
     <strong>Voices</strong> — 28 Kokoro models, Test / Stop<br>
     <strong>Characters</strong> — name, AI ID, photo, backstory, Push<br>
     <strong>Personas</strong> — name, label, gender, backstory, avatar style, appearance, face<br>
@@ -629,6 +635,30 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
       <li>Chat → Send. Text shows right away; voice speaks the whole reply in one go. Chime = your turn.</li>
     </ol>
     <p class="hint">Do not tap Kindroid’s own speaker — that bills their voice credits. Adult writing stays in the browser helper — not here.</p>
+  </div>
+  <div class="card" id="guideHowTo">
+    <h2 style="margin:0 0 8px;font-size:1.15rem">How to Play</h2>
+    <p class="hint">Every game on the Games tab, in short. You need a saved API key and a Kin with an AI ID before a game can talk to Kindroid. Replies that start with “&lt; &gt;” are failed generations — wait and try again. Kindroid allows 10 messages every 30 seconds; the app waits if you hit that limit. Game turns also show up in that Kin’s real Kindroid chat and memory.</p>
+    <h3 style="margin:14px 0 4px;font-size:1rem">Sword of Truth trivia</h3>
+    <p class="hint">Pick who answers (you, or your Kin) and how many questions (5, 10, or 20). Multiple-choice questions come from the Sword of Truth books. If you answer, your Kin reacts after each one. If your Kin answers, you see the book answer and judge Right or Wrong. Scores are saved on this device.</p>
+    <h3 style="margin:14px 0 4px;font-size:1rem">20 Questions</h3>
+    <p class="hint">Choose who thinks and who asks, and optionally type a theme. In “Kin thinks, I ask,” your Kin secretly picks something and you type yes/no questions (or guess “Is it …?”). They should start answers with Yes, No, or Maybe. In “I think, Kin asks,” you think of something and answer Yes, No, or Maybe until they write GUESS: … — then tap Correct or Wrong. After 20 questions you can reveal what it was.</p>
+    <h3 style="margin:14px 0 4px;font-size:1rem">Chess</h3>
+    <p class="hint">Play chess against your Kin. Choose White or Black, then tap a piece and a square. The app is the referee: it keeps the position and lists legal moves. Your Kin is asked for one move at a time. Illegal replies get one retry, then a random legal move. You can set the pawn-promotion piece and resign.</p>
+    <h3 style="margin:14px 0 4px;font-size:1rem">Tic-tac-toe</h3>
+    <p class="hint">Classic 3×3. You go first as X — tap an empty square. Your Kin plays O. Three in a row wins, or the board fills and it’s a draw.</p>
+    <h3 style="margin:14px 0 4px;font-size:1rem">Connect Four</h3>
+    <p class="hint">Drop discs into a seven-column grid. You go first. Four in a row — across, down, or diagonal — wins. The app keeps the board and asks your Kin which column to play.</p>
+    <h3 style="margin:14px 0 4px;font-size:1rem">Story adventure</h3>
+    <p class="hint">Your Kin is the game master. Pick a setting (or write your own) and who you are. Each turn they describe a scene and offer numbered choices; tap one or type what you do. Health and items show on screen and can change during the story. There is no win/loss score besides the adventure you two create.</p>
+    <h3 style="margin:14px 0 4px;font-size:1rem">Would You Rather</h3>
+    <p class="hint">Your Kin offers two choices (or you use the built-in deck). Tap the one you’d rather; they pick too and explain. You can also ask your Kin to make one up. Play as many rounds as you like.</p>
+    <h3 style="margin:14px 0 4px;font-size:1rem">Texas Hold’em</h3>
+    <p class="hint">Heads-up no-limit Texas Hold’em against your Kin. The app is the dealer and referee: it shuffles with a real random generator, deals two hole cards each, burns, and puts out the flop, turn, and river. Blinds are 10/20 and both of you start a match with 1,000 chips. You see your cards; your Kin’s hole cards stay hidden until showdown. Fold, check, call, raise to an amount, or go all-in. Uncalled chips come back, all-in pots are handled, and the showdown evaluator includes kickers, split pots, and the wheel (A-2-3-4-5). Your Kin only chooses an action plus some table talk — they never deal or count the pot.</p>
+    <p class="hint"><strong>Strip mode (optional, adults only).</strong> It stays hidden until you turn on Adults-only (18+) in Settings and confirm you are 18 or older. That switch is off by default. Then the poker screen offers Strip mode. Before the match you list clothes outermost first (or accept the defaults: shoes, socks, belt, shirt, pants, underwear). The loser of each hand removes one piece; a tie removes nothing. Busting your chip stack also costs a piece, then that player rebids 1,000 chips so the clothes match can continue. First one with nothing left loses, or you can quit. Prompts never demand explicit content. This is separate from the Settings option “Strip <em>actions</em> before speech,” which only edits how spoken text is cleaned up.</p>
+    <h3 style="margin:14px 0 4px;font-size:1rem" data-stump-name>Stump the Kindroid</h3>
+    <p class="hint" data-stump-tag>Think of something. Your Kin guesses. Can you stump it?</p>
+    <p class="hint">Pick Characters (a real or fictional person or character from any world — not limited to one series) or Objects (a thing, animal, or item). Think of one, then tap Start. Your Kin asks one yes/no question at a time. Answer with Yes, No, Probably, Probably not, or Don’t know. Your Kin may guess at any time. They get about 20 questions and up to 3 wrong guesses. If they name it, they win; if you last through the questions and the three misses, you stump them. When you stump them you can type what it was and they’ll react. A running scoreboard of “you stumped them” versus “they guessed it” is saved on this device.</p>
   </div>
   <div class="card">
     <h2 style="margin:0 0 6px;font-size:1.15rem">Thank you</h2>
@@ -817,6 +847,7 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
       <button type="button" class="gm-pick" data-game="story">Story adventure<small>Your Kin is game master</small></button>
       <button type="button" class="gm-pick" data-game="wyr">Would You Rather<small>Pick, compare, explain</small></button>
       <button type="button" class="gm-pick" data-game="poker">Texas Hold'em<small>Heads-up no-limit vs your Kin</small></button>
+      <button type="button" class="gm-pick" data-game="stump">Stump the Kindroid<small>Think of something. Your Kin guesses. Can you stump it?</small></button>
     </div>
   </div>
   <div class="card" id="gmStage" hidden>
@@ -5106,6 +5137,217 @@ return {
 })();
 if (typeof module!=='undefined' && module.exports) module.exports = KinPoker;
 
+/* KinStump — Akinator-style referee for Kin Studio.
+   The player thinks of something; the Kin asks yes/no questions and guesses. */
+var KinStump = (function(){
+'use strict';
+
+var NAME = 'Stump the Kindroid';
+var TAGLINE = 'Think of something. Your Kin guesses. Can you stump it?';
+var MAX_Q = 20;
+var MAX_WRONG = 3;
+var ANSWERS = ['Yes','No','Probably','Probably not',"Don't know"];
+var MODES = {
+  character: {id:'character', label:'Characters', blurb:'A real or fictional person or character from any world — not limited to one series.'},
+  object: {id:'object', label:'Objects', blurb:'A thing, animal, or item.'}
+};
+var FALLBACK_Q = {
+  character: [
+    'Is this a real person?',
+    'Is this person fictional?',
+    'Is this a woman?',
+    'Is this a man?',
+    'Are they still alive?',
+    'Are they known for movies or TV?',
+    'Are they known for music?',
+    'Are they a character from a book?',
+    'Are they from the last fifty years?',
+    'Are they usually seen as a villain?'
+  ],
+  object: [
+    'Is this a living thing?',
+    'Is this something you can hold in your hand?',
+    'Is this found indoors?',
+    'Is this an animal?',
+    'Is this used every day?',
+    'Is this bigger than a loaf of bread?',
+    'Is this electronic?',
+    'Is this something you eat or drink?',
+    'Is this made of metal?',
+    'Would you find this in a typical house?'
+  ]
+};
+
+function newGame(mode){
+  mode = (mode==='object') ? 'object' : 'character';
+  return {
+    mode: mode,
+    questions: [],
+    wrongGuesses: [],
+    pending: null,
+    over: false,
+    result: null,
+    secret: null,
+    maxQuestions: MAX_Q,
+    maxWrongGuesses: MAX_WRONG
+  };
+}
+
+function cleanLine(s){
+  return String(s==null?'':s)
+    .replace(/^\s*[*_#>`\-\u2013\u2014]+\s*/,'')
+    .replace(/^[\s*"'`\u201c\u201d]+|[\s*"'`\u201c\u201d]+$/g,'')
+    .replace(/\*+/g,'')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function namedGuess(first){
+  var m = String(first||'').match(/^(?:is it|are they|are you thinking of|was it)\s+(.+?)\??$/i);
+  if (!m) return null;
+  var rest = m[1].trim();
+  if (/^(a|an|the|someone|somebody|something|anyone|anything|some|any)\b/i.test(rest)) return null;
+  if (/^(from|in|on|at|alive|real|fictional|human|male|female|dead|famous|known|usually|often|bigger|smaller|used|made|found|electronic)/i.test(rest)) return null;
+  if (/[A-Z]/.test(rest) && rest.split(/\s+/).length<=6 && rest.length<80) return rest.replace(/\?+$/,'');
+  return null;
+}
+
+function parseReply(text){
+  var raw = String(text||'').replace(/\r/g,'').trim();
+  if (!raw) return null;
+  var guessRe = /(?:^|\n)\s*(?:[*_#>\-\s]*)(?:GUESS|MY GUESS|I GUESS)\s*[:.\u2013\u2014-]\s*(.+)/i;
+  var gm = raw.match(guessRe);
+  if (gm && cleanLine(gm[1])) return {type:'guess', text: cleanLine(gm[1].split('\n')[0])};
+
+  var qRe = /(?:^|\n)\s*(?:[*_#>\-\s]*)(?:QUESTION|Q)\s*[:.\u2013\u2014-]\s*(.+)/i;
+  var qm = raw.match(qRe);
+  if (qm && cleanLine(qm[1])) return {type:'question', text: cleanLine(qm[1].split('\n')[0])};
+
+  var think = raw.match(/\b(?:I(?:'m| am)?\s+(?:going to\s+|gonna\s+)?(?:guess|think)\s+(?:that\s+)?(?:it(?:'s| is)\s+)?|my guess is\s+)([^\n]+)/i);
+  if (think){
+    var gtxt = cleanLine(think[1]);
+    if (gtxt && gtxt.length<80 && !/^(a|an|the)\s+\w+$/i.test(gtxt) && !/^(it is|it's)\s+(a|an)\b/i.test(gtxt)){
+      if (namedGuess('Is it '+gtxt) || /[A-Z]/.test(gtxt)) return {type:'guess', text: gtxt.replace(/[.!?]+$/,'')};
+    }
+  }
+
+  var first = cleanLine(raw.split(/\n/)[0].replace(/^\s*\d+[.)]\s*/,''));
+  var named = namedGuess(first);
+  if (named) return {type:'guess', text: named};
+  if (/^\s*(?:is|are|was|were|does|do|did|can|could|has|have|had|would|will)\b/i.test(first) && first.length>8){
+    if (!/\?\s*$/.test(first)) first = first.replace(/[.!]+$/,'')+'?';
+    return {type:'question', text: first};
+  }
+  return null;
+}
+
+function applyParsed(state, parsed){
+  if (!state || state.over) return {ok:false, error:'game over'};
+  if (!parsed || !parsed.type || !parsed.text) return {ok:false, error:'no parse'};
+  if (parsed.type==='guess'){
+    state.pending = {type:'guess', text: parsed.text};
+    return {ok:true, pending: state.pending};
+  }
+  if (state.questions.length >= state.maxQuestions) return {ok:false, error:'must guess'};
+  state.pending = {type:'question', text: parsed.text};
+  return {ok:true, pending: state.pending};
+}
+
+function answer(state, ans){
+  if (!state || state.over) return {ok:false, error:'game over'};
+  if (!state.pending || state.pending.type!=='question') return {ok:false, error:'no question'};
+  if (ANSWERS.indexOf(ans)<0) return {ok:false, error:'bad answer'};
+  state.questions.push({q: state.pending.text, a: ans});
+  state.pending = null;
+  return {ok:true, forceGuess: state.questions.length>=state.maxQuestions, questions: state.questions.length};
+}
+
+function resolveGuess(state, correct){
+  if (!state || state.over) return {ok:false, error:'game over'};
+  if (!state.pending || state.pending.type!=='guess') return {ok:false, error:'no guess'};
+  var guess = state.pending.text;
+  state.pending = null;
+  state.finalGuess = guess;
+  if (correct){
+    state.over = true;
+    state.result = 'kin';
+    return {ok:true, over:true, result:'kin', guess:guess};
+  }
+  state.wrongGuesses.push(guess);
+  if (state.wrongGuesses.length >= state.maxWrongGuesses){
+    state.over = true;
+    state.result = 'stump';
+    return {ok:true, over:true, result:'stump', guess:guess};
+  }
+  return {ok:true, over:false, result:null, guess:guess};
+}
+
+function setSecret(state, secret){
+  state.secret = String(secret||'').trim();
+  return state.secret;
+}
+
+function formatLog(state){
+  var lines = [];
+  state.questions.forEach(function(item, i){ lines.push('Q'+(i+1)+': '+item.q+' \u2192 '+item.a); });
+  lines.push(state.wrongGuesses.length ? ('Wrong guesses: '+state.wrongGuesses.join('; ')) : 'Wrong guesses: none');
+  lines.push('Questions used: '+state.questions.length+'/'+state.maxQuestions+'. Wrong guesses: '+state.wrongGuesses.length+'/'+state.maxWrongGuesses+'.');
+  return lines.join('\n');
+}
+
+function fallback(state){
+  if (!state || state.questions.length>=state.maxQuestions){
+    return {type:'guess', text: (state && state.mode==='character') ? 'a well-known person we have been circling' : 'a common object we have been circling'};
+  }
+  var used = {};
+  state.questions.forEach(function(item){ used[String(item.q||'').toLowerCase()] = 1; });
+  var pool = FALLBACK_Q[state.mode] || FALLBACK_Q.object;
+  for (var i=0;i<pool.length;i++) if (!used[pool[i].toLowerCase()]) return {type:'question', text: pool[i]};
+  return {type:'question', text: 'Is there something important I have not asked about yet?'};
+}
+
+function modeBlurb(mode){
+  return (MODES[mode]||MODES.character).blurb;
+}
+
+function buildOpeningPrompt(mode){
+  mode = (mode==='object') ? 'object' : 'character';
+  var kind = mode==='object' ? 'an object — a thing, animal, or item' : 'a character — a real or fictional person or character from any world, not limited to one book series';
+  return '(Game: '+NAME+') You are trying to guess what I am thinking of. This is '+(mode==='object'?'Objects':'Characters')+' mode: I am thinking of '+kind+'. I will answer only Yes, No, Probably, Probably not, or Don\'t know. You may guess at any time. You get up to '+MAX_Q+' yes/no questions and up to '+MAX_WRONG+' wrong guesses. If you have not guessed correctly after that, I win.\n\nReply with exactly this format: the first line must be either\nQUESTION: a single yes/no question\nor\nGUESS: your guess\nThen add one short in-character flavor line. Do not ask a second question. Ask your first question now.';
+}
+
+function buildTurnPrompt(state, lastLine){
+  var parts = ['(Game: '+NAME+') Full log:', formatLog(state)];
+  if (lastLine) parts.push(lastLine);
+  if (state.questions.length>=state.maxQuestions) parts.push('You have used all '+state.maxQuestions+' questions. You must guess now. First line: GUESS: your guess');
+  else parts.push('Ask another question or guess. First line must be QUESTION: ... or GUESS: ... Then one short flavor line.');
+  return parts.join('\n');
+}
+
+return {
+  NAME: NAME,
+  TAGLINE: TAGLINE,
+  MAX_Q: MAX_Q,
+  MAX_WRONG: MAX_WRONG,
+  ANSWERS: ANSWERS,
+  MODES: MODES,
+  newGame: newGame,
+  parseReply: parseReply,
+  applyParsed: applyParsed,
+  answer: answer,
+  resolveGuess: resolveGuess,
+  setSecret: setSecret,
+  formatLog: formatLog,
+  fallback: fallback,
+  modeBlurb: modeBlurb,
+  buildOpeningPrompt: buildOpeningPrompt,
+  buildTurnPrompt: buildTurnPrompt,
+  namedGuess: namedGuess
+};
+})();
+if (typeof module!=='undefined' && module.exports) module.exports = KinStump;
+
+
 
 
 /* Kin Studio — Games tab. The app is the referee and keeps the true game state;
@@ -5163,7 +5405,7 @@ var STORY_SETTINGS = [
   {id:'mystery', label:'Small-town mystery', text:'A rainy small town where someone has gone missing, and everyone has a secret.'},
   {id:'custom', label:'Type my own…', text:''}
 ];
-var GAME_NAMES = {trivia:'Sword of Truth trivia', twenty:'20 Questions', chess:'Chess', ttt:'Tic-tac-toe', c4:'Connect Four', story:'Story adventure', wyr:'Would You Rather', poker:'Texas Hold\'em'};
+var GAME_NAMES = {trivia:'Sword of Truth trivia', twenty:'20 Questions', chess:'Chess', ttt:'Tic-tac-toe', c4:'Connect Four', story:'Story adventure', wyr:'Would You Rather', poker:'Texas Hold\'em', stump:(typeof KinStump!=='undefined'&&KinStump.NAME)||'Stump the Kindroid'};
 
 function $g(id){ return document.getElementById(id); }
 function E(s){ return (typeof esc==='function') ? esc(s) : String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -5279,7 +5521,7 @@ function retryLast(){ if(G.lastPrompt) ask(G.lastPrompt, G.lastHandler, G.lastOp
 
 /* ---------- stats ---------- */
 function bumpStat(game, key){ var s=store.get('games_stats',{})||{}; s[game]=s[game]||{}; s[game][key]=(s[game][key]||0)+1; store.set('games_stats',s); }
-function statLine(game){ var s=(store.get('games_stats',{})||{})[game]||{}; var parts=[]; ['win','loss','draw'].forEach(function(k){ if(s[k]) parts.push(s[k]+' '+(k==='win'?'won':k==='loss'?'lost':'drawn')); }); return parts.join(' · '); }
+function statLine(game){ var s=(store.get('games_stats',{})||{})[game]||{}; if(game==='stump') return (s.win||0)+' stumped · '+(s.loss||0)+' guessed'; var parts=[]; ['win','loss','draw'].forEach(function(k){ if(s[k]) parts.push(s[k]+' '+(k==='win'?'won':k==='loss'?'lost':'drawn')); }); return parts.join(' · '); }
 
 /* ---------- framework ---------- */
 function openGame(id){
@@ -6081,12 +6323,202 @@ var poker = {
 };
 
 
-var GAMES={trivia:trivia, twenty:twenty, chess:chess, ttt:ttt, c4:c4, story:story, wyr:wyr, poker:poker};
-G.GAMES=GAMES; G.parse={chess:chess.parse, yesNo:yesNo, choices:story.parseChoices, letter:trivia.parseLetter, poker:KinPoker.parseAction};
+/* Stump the Kindroid — Kin asks yes/no questions and guesses. */
+function paintStumpName(){
+  document.querySelectorAll('[data-stump-name]').forEach(function(el){ el.textContent = KinStump.NAME; });
+  document.querySelectorAll('[data-stump-tag]').forEach(function(el){ el.textContent = KinStump.TAGLINE; });
+  var b=document.querySelector('#gmPicker [data-game="stump"]');
+  if (b) b.innerHTML = E(KinStump.NAME)+'<small>'+E(KinStump.TAGLINE)+'</small>';
+}
+function stumpScoreLine(){
+  var s=(store.get('games_stats',{})||{}).stump||{};
+  return 'You stumped '+kinName()+': '+(s.win||0)+' \u00b7 '+kinName()+' guessed it: '+(s.loss||0);
+}
+function kinStumpMove(o){
+  ask(o.prompt, function(text){
+    var mv=o.parse(text);
+    if (mv!=null){ o.apply(mv,'kin'); return; }
+    logLine('sys','No question or guess found in that reply — asking once more.',{cls:'warn'});
+    ask('('+o.name+') I couldn\'t find a legal reply in that. Reply with exactly one of: '+o.legalText()+'. Put it on the first line.', function(t2){
+      var mv2=o.parse(t2);
+      if (mv2!=null){ o.apply(mv2,'kin'); return; }
+      var r=o.fallback();
+      logLine('sys','Still no legal reply — the app chose this for '+kinName()+': '+o.label(r)+'.',{cls:'warn'});
+      o.apply(r,'fallback');
+    });
+  }, { onFail: function(){
+    var area=$g('gmArea');
+    if (area && !area.querySelector('.gm-randbtn')){
+      var r=el('div','row gm-randbtn');
+      r.appendChild(btn('Pick a fallback for '+kinName(),'secondary',function(){
+        r.remove();
+        var m=o.fallback();
+        logLine('sys','Fallback for '+kinName()+': '+o.label(m)+'.',{cls:'warn'});
+        o.apply(m,'fallback');
+      }));
+      area.appendChild(r);
+    }
+  }});
+}
+
+var stump = {
+  setup: function(area){
+    var st=G.st;
+    st.mode = st.mode==='object' ? 'object' : 'character';
+    area.innerHTML='';
+    area.appendChild(el('p','hint', E(KinStump.TAGLINE)));
+    area.appendChild(el('p','hint', 'You think of something. '+E(kinName())+' asks yes-or-no questions and tries to guess.'));
+    area.appendChild(chipGroup([
+      {v:'character', l:KinStump.MODES.character.label},
+      {v:'object', l:KinStump.MODES.object.label}
+    ], st.mode, function(v){ st.mode=v; stump.setup($g('gmArea')); }));
+    area.appendChild(el('p','hint', E(KinStump.modeBlurb(st.mode))));
+    var r=el('div','row');
+    r.appendChild(btn('Start','',function(){ if (ensureReady()) stump.start(); }));
+    area.appendChild(r);
+    if ($g('gmScore')) $g('gmScore').textContent = statLine('stump');
+  },
+  start: function(){
+    var st=G.st;
+    st.g = KinStump.newGame(st.mode);
+    G.started=true;
+    var what = st.mode==='object' ? 'an object — a thing, animal, or item' : 'a real or fictional person or character (any world)';
+    logLine('sys','Think of '+what+'. Don\'t say what it is. '+kinName()+' will try to guess. '+KinStump.MAX_Q+' questions, '+KinStump.MAX_WRONG+' wrong guesses.');
+    stump.draw();
+    stump.askKin(KinStump.buildOpeningPrompt(st.mode));
+  },
+  counter: function(){
+    var g=G.st.g; if (!g || !$g('gmScore')) return;
+    if (g.over) $g('gmScore').textContent = statLine('stump');
+    else $g('gmScore').textContent = 'Q '+g.questions.length+'/'+g.maxQuestions+' \u00b7 Wrong guesses '+g.wrongGuesses.length+'/'+g.maxWrongGuesses;
+  },
+  askKin: function(prompt){
+    var g=G.st.g;
+    kinStumpMove({
+      name: KinStump.NAME,
+      prompt: prompt,
+      legalText: function(){ return (G.st.g && G.st.g.questions.length>=G.st.g.maxQuestions) ? 'GUESS: your guess' : 'QUESTION: your yes/no question, or GUESS: your guess'; },
+      parse: function(t){
+        var p=KinStump.parseReply(t);
+        if (!p) return null;
+        if (p.type==='question' && G.st.g && G.st.g.questions.length>=G.st.g.maxQuestions) return null;
+        return p;
+      },
+      fallback: function(){ return KinStump.fallback(G.st.g); },
+      label: function(p){ return (p.type==='guess'?'guess: ':'question: ')+p.text; },
+      apply: function(parsed){
+        var res=KinStump.applyParsed(G.st.g, parsed);
+        if (!res.ok){
+          var fb=KinStump.fallback(G.st.g);
+          KinStump.applyParsed(G.st.g, fb);
+          logLine('sys','Fallback: '+((fb.type==='guess'?'guess: ':'question: ')+fb.text)+'.',{cls:'warn'});
+        }
+        stump.draw();
+      }
+    });
+  },
+  draw: function(){
+    var st=G.st, g=st.g, area=$g('gmArea');
+    if (!g){ stump.setup(area); return; }
+    area.innerHTML='';
+    stump.counter();
+    if (g.questions.length || g.wrongGuesses.length){
+      var log=el('div','gm-stump-log');
+      log.id='stumpLog';
+      log.textContent = KinStump.formatLog(g);
+      area.appendChild(log);
+    }
+    if (g.over){
+      if (g.result==='kin'){
+        area.appendChild(el('p','gm-stump-q', E(kinName())+' guessed it'+(g.finalGuess?': '+E(g.finalGuess):'')+'!'));
+        if (g.wrongGuesses.length) area.appendChild(el('p','hint','Wrong guesses along the way: '+E(g.wrongGuesses.join(', '))));
+      } else {
+        area.appendChild(el('p','gm-stump-q','You stumped '+E(kinName())+'!'));
+        if (g.wrongGuesses.length) area.appendChild(el('p','hint','Wrong guesses: '+E(g.wrongGuesses.join(', '))));
+        if (!g.secret){
+          area.appendChild(el('label','','What were you thinking of?'));
+          var inp=el('input'); inp.id='stumpSecret'; inp.placeholder='Type it here'; area.appendChild(inp);
+          var tr=el('div','row');
+          tr.appendChild(btn('Tell '+kinName(),'',function(){
+            var secret=(inp.value||'').trim()||'a secret';
+            KinStump.setSecret(g, secret);
+            logLine('user', secret);
+            ask('(Game: '+KinStump.NAME+') You did not guess it — I stumped you. I was thinking of: '+secret+'. React in character.', function(){ G.started=false; });
+            stump.draw();
+          }));
+          area.appendChild(tr);
+        } else {
+          area.appendChild(el('p','hint','You were thinking of: '+E(g.secret)));
+        }
+      }
+      area.appendChild(el('p','hint', 'Scoreboard — '+stumpScoreLine()));
+      var again=el('div','row');
+      again.appendChild(btn('Play again','',function(){ stump.setup($g('gmArea')); G.started=false; }));
+      area.appendChild(again);
+      return;
+    }
+    if (g.pending && g.pending.type==='question'){
+      area.appendChild(el('p','gm-stump-q', E(g.pending.text)));
+      var ans=el('div','gm-stump-ans'); ans.id='stumpAns';
+      KinStump.ANSWERS.forEach(function(a){
+        var cls = a==='Yes'?'ok':(a==='No'?'danger':'secondary');
+        var b=btn(a, cls, function(){ stump.onAnswer(a); });
+        if (a==="Don't know") b.classList.add('span');
+        ans.appendChild(b);
+      });
+      area.appendChild(ans);
+    } else if (g.pending && g.pending.type==='guess'){
+      area.appendChild(el('p','gm-stump-q','Guess: '+E(g.pending.text)));
+      var gr=el('div','gm-yn'); gr.id='stumpGuess';
+      gr.appendChild(btn('Correct','ok',function(){ stump.onGuess(true); }));
+      gr.appendChild(btn('Wrong','danger',function(){ stump.onGuess(false); }));
+      area.appendChild(gr);
+    } else {
+      area.appendChild(el('p','hint', kinName()+' is thinking of a question\u2026'));
+    }
+  },
+  onAnswer: function(ans){
+    var g=G.st.g;
+    if (!g || g.over || G.busy) return;
+    var r=KinStump.answer(g, ans);
+    if (!r.ok) return;
+    logLine('user', ans);
+    stump.draw();
+    var note='I answered: '+ans+'.';
+    if (r.forceGuess) note += ' That was question '+g.maxQuestions+'. You must guess now.';
+    stump.askKin(KinStump.buildTurnPrompt(g, note));
+  },
+  onGuess: function(correct){
+    var g=G.st.g;
+    if (!g || g.over || G.busy) return;
+    var r=KinStump.resolveGuess(g, correct);
+    if (!r.ok) return;
+    logLine('user', correct?'Correct!':'Wrong.');
+    if (r.over){
+      if (g.result==='kin'){
+        bumpStat('stump','loss');
+        logLine('sys', kinName()+' guessed it!');
+        stump.draw();
+        ask('(Game: '+KinStump.NAME+') Correct! You got it after '+g.questions.length+' question'+(g.questions.length===1?'':'s')+(g.wrongGuesses.length?' and '+g.wrongGuesses.length+' wrong guess'+(g.wrongGuesses.length===1?'':'es'):'')+'. React in character.', function(){ G.started=false; });
+      } else {
+        bumpStat('stump','win');
+        logLine('sys','You stumped '+kinName()+'!');
+        stump.draw();
+      }
+      return;
+    }
+    logLine('sys','Wrong guess: '+r.guess+'.');
+    stump.draw();
+    stump.askKin(KinStump.buildTurnPrompt(g, 'No, it is not '+r.guess+'. Keep going.'));
+  }
+};
+var GAMES={trivia:trivia, twenty:twenty, chess:chess, ttt:ttt, c4:c4, story:story, wyr:wyr, poker:poker, stump:stump};
+G.GAMES=GAMES; G.parse={chess:chess.parse, yesNo:yesNo, choices:story.parseChoices, letter:trivia.parseLetter, poker:KinPoker.parseAction, stump:KinStump.parseReply};
 
 /* ---------- wire up ---------- */
 function init(){
   if(!$g('p-games')) return;
+  paintStumpName();
   document.querySelectorAll('#gmPicker .gm-pick').forEach(function(b){ b.onclick=function(){ openGame(b.dataset.game); }; });
   $g('gmChar').onchange=function(){ store.set('games_lastChar',$g('gmChar').value); paintCharHint(); };
   $g('gmRetry').onclick=retryLast;
