@@ -193,6 +193,26 @@ html.windows-app .sheet-card{border-radius:16px}
 .gm-wyr{display:grid;grid-template-columns:1fr;gap:8px}@media(min-width:600px){.gm-wyr{grid-template-columns:1fr 1fr}}
 .gm-wyr button{min-height:70px;border:1px solid var(--border);border-radius:12px;background:#12151a;color:var(--text);font-size:.92rem;padding:10px;text-align:left;cursor:pointer}
 .gm-wyr button.me{border-color:var(--accent);background:#1a2a24}.gm-wyr button.kin{box-shadow:inset 0 0 0 2px #f0c674}
+
+/* ---- Texas Hold'em ---- */
+.pk-table{display:flex;flex-direction:column;gap:10px;align-items:center;margin:4px 0}
+.pk-seat{width:100%;display:flex;flex-direction:column;align-items:center;gap:4px}
+.pk-name{font-size:.85rem;color:var(--muted)}
+.pk-row{display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap}
+.pk-card{width:48px;height:68px;border-radius:8px;background:#f4efe4;border:1px solid #cfc6b4;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;line-height:1.05;box-shadow:0 2px 0 #0002;flex:0 0 auto;user-select:none}
+.pk-card .r{font-size:1.15rem}
+.pk-card .s{font-size:1.15rem}
+.pk-card.red{color:#c0392b}
+.pk-card.blk{color:#1a1d22}
+.pk-card.back{background:linear-gradient(160deg,#1b3d32,#0f231c);border-color:#2a4a3e;color:#8fd0b8}
+.pk-card.slot{background:transparent;border:1px dashed var(--border);box-shadow:none}
+.pk-pot{font-weight:700;color:#6b8f7e;font-size:1rem}
+.pk-street{font-size:.8rem;color:var(--muted);text-align:center}
+.pk-clothes{font-size:.78rem;width:100%;line-height:1.4;margin:6px 0;color:var(--muted)}
+.pk-raise{display:flex;gap:6px;width:100%;align-items:center;margin-top:6px}
+.pk-raise input{flex:1 1 90px;margin:0;min-height:46px}
+@media(max-width:400px){.pk-card{width:42px;height:60px}}
+
 #gmStage.busy .gm-act{opacity:.55;pointer-events:none}
 html.windows-app .gm-picker .gm-pick{min-height:56px}
 
@@ -524,6 +544,9 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
     <label><input type="checkbox" id="audioBook" checked> Audiobook mode — speak kin replies, chime when it’s your turn</label>
     <label><input type="checkbox" id="listenLive"> Listen live — only if you also chat in the Kindroid app. Uses the 600/day pulls. Leave off if you only Send here.</label>
     <label><input type="checkbox" id="dyslexicFont"> OpenDyslexic font</label>
+    <div class="section">Adult games</div>
+    <label><input type="checkbox" id="adultsOnly"> Adults-only (18+) — unlocks adult game modes such as strip poker</label>
+    <p class="hint">Off by default. You must confirm you are 18 or older. The app never asks your Kin to generate explicit content; their Kindroid settings decide how they reply.</p>
     <div class="section">Kindroid audiobook setup</div>
     <p class="hint">
       Goal: they talk, you listen, you reply when they finish.<br><br>
@@ -588,6 +611,7 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
     <p class="hint"><strong>Windows</strong> — tap Windows and open <strong>Kin-Studio.exe</strong>. It is its own window. Not a Chrome tab. Not Edge.</p>
     <p class="hint"><strong>Guide</strong> — this page<br>
     <p class="hint"><strong>Chat</strong> — 1:1 send, listen, rewind. History loads the old thread so Replay works on past lines. Import the Kindroid chat-exporter JSON if you already downloaded it.<br>
+    <strong>Games</strong> — play against your Kin: trivia, 20 questions, chess, Texas Hold'em and more.<br>
     <strong>Voices</strong> — 28 Kokoro models, Test / Stop<br>
     <strong>Characters</strong> — name, AI ID, photo, backstory, Push<br>
     <strong>Personas</strong> — name, label, gender, backstory, avatar style, appearance, face<br>
@@ -792,6 +816,7 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
       <button type="button" class="gm-pick" data-game="c4">Connect Four<small>Four in a row</small></button>
       <button type="button" class="gm-pick" data-game="story">Story adventure<small>Your Kin is game master</small></button>
       <button type="button" class="gm-pick" data-game="wyr">Would You Rather<small>Pick, compare, explain</small></button>
+      <button type="button" class="gm-pick" data-game="poker">Texas Hold'em<small>Heads-up no-limit vs your Kin</small></button>
     </div>
   </div>
   <div class="card" id="gmStage" hidden>
@@ -3548,6 +3573,7 @@ function persistSettings(msg, opts){
       audiobook: !$('audioBook') || $('audioBook').checked,
       listen_live: !!( $('listenLive') && $('listenLive').checked ),
       dyslexic: !!( $('dyslexicFont') && $('dyslexicFont').checked ),
+      adults_only: $('adultsOnly') ? !!$('adultsOnly').checked : !!((store.get('settings',{})||{}).adults_only),
       auto_voice: autoVoiceOn(),
       tts_engine: 'kokoro',
       piper_voice: ($('piperVoice')&&$('piperVoice').value)||'af_heart',
@@ -3573,6 +3599,14 @@ if($('dyslexicFont')) $('dyslexicFont').onchange=function(){
   persistSettings(null,{listen:false});
 };
 if($('listenLive')) $('listenLive').onchange=function(){ persistSettings(); };
+if($('adultsOnly')) $('adultsOnly').onchange=function(){
+  if($('adultsOnly').checked){
+    var yes=confirm('This unlocks adult game modes such as strip poker. By continuing you confirm you are 18 or older.');
+    if(!yes){ $('adultsOnly').checked=false; return; }
+  }
+  persistSettings(null,{listen:false});
+  try{ if(window.KinGames && KinGames.refreshAdults) KinGames.refreshAdults(); }catch(_){}
+};
 if($('shareUrl')){
   $('shareUrl').addEventListener('change',()=>persistSettings(null,{listen:false}));
   $('shareUrl').addEventListener('blur',()=>persistSettings(null,{listen:false}));
@@ -3597,6 +3631,7 @@ function loadSettings(){
   if($('audioBook')) $('audioBook').checked=s.audiobook!==false;
   if($('listenLive')) $('listenLive').checked=!!s.listen_live;
   if($('dyslexicFont')) $('dyslexicFont').checked=!!s.dyslexic;
+  if($('adultsOnly')) $('adultsOnly').checked=s.adults_only===true;
   try{ document.body.classList.toggle('dyslexic', !!s.dyslexic); }catch(_){}
   if($('autoVoice')) $('autoVoice').checked=s.auto_voice!==false;
   if($('gSpeak')) $('gSpeak').checked=s.auto_voice!==false;
@@ -4439,6 +4474,640 @@ var KinChess=(function(){
 })();
 if(typeof module!=='undefined') module.exports=KinChess;
 
+/* KinPoker — heads-up no-limit Texas Hold'em referee for Kin Studio.
+   The app holds the true state. The Kin only chooses an action plus banter. */
+var KinPoker = (function(){
+'use strict';
+
+var RANK_CHAR = {2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'T',11:'J',12:'Q',13:'K',14:'A'};
+var CHAR_RANK = {2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,'T':10,'J':11,'Q':12,'K':13,'A':14,'t':10,'j':11,'q':12,'k':13,'a':14,'10':10};
+var SUIT_SYM = {s:'\u2660', h:'\u2665', d:'\u2666', c:'\u2663'};
+var SUIT_FROM = {s:'s', h:'h', d:'d', c:'c', S:'s', H:'h', D:'d', C:'c', '\u2660':'s', '\u2665':'h', '\u2666':'d', '\u2663':'c'};
+var RANK_WORD = {2:'two',3:'three',4:'four',5:'five',6:'six',7:'seven',8:'eight',9:'nine',10:'ten',11:'jack',12:'queen',13:'king',14:'ace'};
+var RANK_WORDS = {2:'twos',3:'threes',4:'fours',5:'fives',6:'sixes',7:'sevens',8:'eights',9:'nines',10:'tens',11:'jacks',12:'queens',13:'kings',14:'aces'};
+var DEFAULT_CLOTHES = ['shoes','socks','belt','shirt','pants','underwear'];
+
+function parseCard(s){
+  if (s && typeof s === 'object' && s.r && s.s) return {r:s.r, s:s.s};
+  var t = String(s||'').trim();
+  var m = t.match(/^(10|[2-9TtJjQqKkAa])([cdhsCDHS\u2660\u2665\u2666\u2663])$/);
+  if (!m) throw new Error('Bad card: '+s);
+  return {r: CHAR_RANK[m[1]], s: SUIT_FROM[m[2]]};
+}
+function cardKey(c){ c = parseCard(c); return RANK_CHAR[c.r]+c.s; }
+function formatCard(c){ c = parseCard(c); return RANK_CHAR[c.r]+SUIT_SYM[c.s]; }
+function formatCards(arr){ return (arr||[]).map(formatCard).join(' '); }
+function isRed(c){ return parseCard(c).s==='h' || parseCard(c).s==='d'; }
+
+function makeDeck(){
+  var d=[], r, s, suits=['s','h','d','c'];
+  for (r=2;r<=14;r++) for (s=0;s<4;s++) d.push({r:r, s:suits[s]});
+  return d;
+}
+function shuffleDeck(){
+  var d = makeDeck();
+  var i, j, t, buf;
+  for (i=d.length-1;i>0;i--){
+    if (typeof crypto!=='undefined' && crypto.getRandomValues){
+      buf = new Uint32Array(1);
+      crypto.getRandomValues(buf);
+      j = buf[0] % (i+1);
+    } else {
+      j = Math.floor(Math.random()*(i+1));
+    }
+    t=d[i]; d[i]=d[j]; d[j]=t;
+  }
+  return d;
+}
+function makeStackedDeck(hero, kin, board){
+  function list(x){ return (x||[]).map(parseCard); }
+  hero=list(hero); kin=list(kin); board=list(board);
+  var used={}, i;
+  hero.concat(kin).concat(board).forEach(function(c){ used[cardKey(c)]=1; });
+  var rest = makeDeck().filter(function(c){ return !used[cardKey(c)]; });
+  var burns = rest.slice(0,3);
+  var filler = rest.slice(3);
+  var d = filler.slice();
+  var flop = board.slice(0,3), turn=board[3], river=board[4];
+  // Push in reverse of deal-with-pop order: burn then card(s).
+  if (river) d.push(river, burns[2]);
+  if (turn) d.push(turn, burns[1]);
+  if (flop.length===3) d.push(flop[2], flop[1], flop[0], burns[0]);
+  d.push(kin[1], hero[1], kin[0], hero[0]);
+  return d;
+}
+
+function compare(a, b){
+  var n = Math.max(a.length, b.length), i, d;
+  for (i=0;i<n;i++){ d=(a[i]||0)-(b[i]||0); if (d) return d>0?1:-1; }
+  return 0;
+}
+function straightHighOf(ranksDesc){
+  var seen={}, u=[], i, r;
+  for (i=0;i<ranksDesc.length;i++){ r=ranksDesc[i]; if (!seen[r]){ seen[r]=1; u.push(r); } }
+  if (seen[14] && seen[5] && seen[4] && seen[3] && seen[2]) return 5;
+  if (u.length<5) return 0;
+  u.sort(function(a,b){ return b-a; });
+  if (u.length===5 && u[0]-u[4]===4) return u[0];
+  return 0;
+}
+function eval5(cards){
+  var ranks = cards.map(function(c){ return c.r; }).sort(function(a,b){ return b-a; });
+  var suits = cards.map(function(c){ return c.s; });
+  var flush = suits.every(function(s){ return s===suits[0]; });
+  var sh = straightHighOf(ranks);
+  if (flush && sh) return [8, sh];
+  var cnt={}, i;
+  for (i=0;i<ranks.length;i++) cnt[ranks[i]]=(cnt[ranks[i]]||0)+1;
+  var groups = Object.keys(cnt).map(Number);
+  groups.sort(function(a,b){ return cnt[b]-cnt[a] || b-a; });
+  if (cnt[groups[0]]===4) return [7, groups[0], groups[1]];
+  if (cnt[groups[0]]===3 && cnt[groups[1]]===2) return [6, groups[0], groups[1]];
+  if (flush) return [5].concat(ranks);
+  if (sh) return [4, sh];
+  if (cnt[groups[0]]===3) return [3, groups[0]].concat(groups.slice(1));
+  if (cnt[groups[0]]===2 && groups.length>=2 && cnt[groups[1]]===2) return [2, groups[0], groups[1], groups[2]];
+  if (cnt[groups[0]]===2) return [1, groups[0]].concat(groups.slice(1));
+  return [0].concat(ranks);
+}
+function evaluate(cards){
+  cards = (cards||[]).map(parseCard);
+  if (cards.length<5) return null;
+  if (cards.length===5) return eval5(cards);
+  var best=null;
+  function rec(start, chosen){
+    if (chosen.length===5){
+      var s=eval5(chosen);
+      if (!best || compare(s,best)>0) best=s;
+      return;
+    }
+    for (var i=start;i<cards.length;i++){ chosen.push(cards[i]); rec(i+1, chosen); chosen.pop(); }
+  }
+  rec(0, []);
+  return best;
+}
+function nameHand(score){
+  if (!score) return '';
+  var c=score[0], rn=function(r){ return RANK_WORD[r]; }, rns=function(r){ return RANK_WORDS[r]; };
+  if (c===8 && score[1]===14) return 'a royal flush';
+  if (c===8) return 'a straight flush, '+rn(score[1])+'-high';
+  if (c===7) return 'four '+rns(score[1])+', '+rn(score[2])+' kicker';
+  if (c===6) return 'a full house, '+rns(score[1])+' over '+rns(score[2]);
+  if (c===5) return 'a flush, '+rn(score[1])+'-high';
+  if (c===4 && score[1]===5) return 'a wheel straight (A-2-3-4-5)';
+  if (c===4) return 'a straight, '+rn(score[1])+'-high';
+  if (c===3) return 'three '+rns(score[1])+', '+rn(score[2])+' kicker';
+  if (c===2) return 'two pair, '+rns(score[1])+' and '+rns(score[2])+', '+rn(score[3])+' kicker';
+  if (c===1) return 'a pair of '+rns(score[1])+', '+rn(score[2])+' kicker';
+  return 'high card '+rn(score[1]);
+}
+
+function describeHole(hole){
+  var a=parseCard(hole[0]), b=parseCard(hole[1]);
+  var hi = a.r>=b.r ? a : b, lo = a.r>=b.r ? b : a;
+  var suited = a.s===b.s;
+  if (a.r===b.r){
+    var q = a.r>=11 ? 'a high pair' : a.r>=7 ? 'a middle pair' : 'a small pair';
+    return 'pocket '+RANK_WORDS[a.r]+' ('+q+')';
+  }
+  var name = RANK_WORD[hi.r]+'-'+RANK_WORD[lo.r]+(suited?' suited':' offsuit');
+  if (hi.r===14 && lo.r>=12) return name+' (a strong drawing hand)';
+  if (hi.r<=7 && lo.r<=6 && !suited) return name+' (a weak hand)';
+  if (suited && (hi.r-lo.r)<=2 && lo.r>=5) return name+' (suited connectors)';
+  return name;
+}
+function flushDraw(cards){
+  var cnt={s:0,h:0,d:0,c:0}, i;
+  for (i=0;i<cards.length;i++) cnt[cards[i].s]++;
+  var suit=null, n=0;
+  ['s','h','d','c'].forEach(function(s){ if (cnt[s]>n){ n=cnt[s]; suit=s; } });
+  if (n===4 && cards.length<7) return suit;
+  return null;
+}
+function straightDraw(cards){
+  if (cards.length>=7) return null;
+  var seen={}, i;
+  cards.forEach(function(c){ seen[c.r]=1; });
+  if (seen[14]) seen[1]=1;
+  function hasRun(start, len){
+    for (var k=0;k<len;k++) if (!seen[start+k]) return false;
+    return true;
+  }
+  // open-ender: 4 consecutive, both ends live (and not already a straight)
+  var oesd=false, gut=false, start;
+  for (start=1; start<=10; start++){
+    if (hasRun(start,5)) return null; // already a straight (evaluate handles made hands)
+  }
+  for (start=1; start<=11; start++){
+    if (hasRun(start,4)){
+      // ignore wheel-edge quirks: 1-2-3-4 is OESD to 5 (and ace already there for wheel... 1 is ace)
+      oesd=true;
+    }
+  }
+  if (oesd) return 'an open-ended straight draw';
+  for (start=1; start<=10; start++){
+    var miss=0, k;
+    for (k=0;k<5;k++) if (!seen[start+k]) miss++;
+    if (miss===1) gut=true;
+  }
+  return gut ? 'a gutshot straight draw' : null;
+}
+function describeStrength(hole, board){
+  hole=(hole||[]).map(parseCard); board=(board||[]).map(parseCard);
+  if (!board.length) return 'You have '+describeHole(hole)+'.';
+  var all=hole.concat(board);
+  var sc=evaluate(all);
+  var parts=['You have '+nameHand(sc)];
+  var fd=flushDraw(all);
+  if (fd) parts.push('a flush draw');
+  var sd=straightDraw(all);
+  if (sd && sc && sc[0]<4) parts.push(sd);
+  return parts.join(', and ')+'.';
+}
+function strength01(hole, board){
+  hole=(hole||[]).map(parseCard); board=(board||[]).map(parseCard);
+  if (!board.length){
+    if (hole[0].r===hole[1].r) return hole[0].r>=11 ? 0.75 : 0.5;
+    var hi=Math.max(hole[0].r,hole[1].r), lo=Math.min(hole[0].r,hole[1].r);
+    if (hi===14 && lo>=13) return 0.65;
+    if (hi===14 && lo>=10) return 0.45;
+    return 0.25;
+  }
+  var sc=evaluate(hole.concat(board));
+  var base=(sc[0]+1)/9;
+  if (flushDraw(hole.concat(board)) || straightDraw(hole.concat(board))) base=Math.min(1, base+0.12);
+  return base;
+}
+
+function parseClothes(text, fallback){
+  var parts=String(text==null?'':text).split(/[\n,;]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+  if (!parts.length) return (fallback||DEFAULT_CLOTHES).slice();
+  return parts;
+}
+function removePiece(player){
+  if (!player.clothesOn.length) return null;
+  var piece=player.clothesOn.shift();
+  player.clothesOff.push(piece);
+  return piece;
+}
+
+function other(who){ return who==='hero' ? 'kin' : 'hero'; }
+function newPlayer(stack, clothes){
+  return {stack:stack, hole:[], bet:0, committed:0, folded:false, allin:false, acted:false, clothesOn:(clothes||DEFAULT_CLOTHES).slice(), clothesOff:[]};
+}
+function newMatch(opts){
+  opts=opts||{};
+  var stack=opts.startingStack||1000;
+  return {
+    sb: opts.sb||10,
+    bb: opts.bb||20,
+    startingStack: stack,
+    strip: !!opts.strip,
+    button: opts.button||'hero',
+    hero: newPlayer(stack, opts.heroClothes ? parseClothes(opts.heroClothes) : DEFAULT_CLOTHES.slice()),
+    kin: newPlayer(stack, opts.kinClothes ? parseClothes(opts.kinClothes) : DEFAULT_CLOTHES.slice()),
+    handNo: 0,
+    board: [],
+    street: 'idle',
+    toAct: null,
+    currentBet: 0,
+    lastRaiseBy: opts.bb||20,
+    onlyCallOrFold: false,
+    handOver: false,
+    matchOver: false,
+    matchWinner: null,
+    matchWhy: null,
+    winner: null,
+    split: false,
+    winHow: null,
+    stripped: null,
+    heroRebuy: false,
+    kinRebuy: false,
+    potWon: 0,
+    heroScore: null,
+    kinScore: null,
+    heroHandName: '',
+    kinHandName: ''
+  };
+}
+function putChips(p, amt){
+  var n=Math.min(Math.max(0,amt), p.stack);
+  p.stack-=n; p.bet+=n; p.committed+=n;
+  if (p.stack===0) p.allin=true;
+  return n;
+}
+function dealPop(match, n){
+  var out=[], i;
+  for (i=0;i<n;i++) out.push(match.deck.pop());
+  return out;
+}
+function startHand(match, opts){
+  opts=opts||{};
+  match.handNo++;
+  if (match.handNo>1) match.button = other(match.button);
+  ['hero','kin'].forEach(function(who){
+    var p=match[who];
+    p.hole=[]; p.bet=0; p.committed=0; p.folded=false; p.allin=false; p.acted=false;
+  });
+  match.board=[];
+  match.street='preflop';
+  match.deck = opts.deck ? opts.deck.map(parseCard) : shuffleDeck();
+  match.handOver=false;
+  match.winner=null;
+  match.split=false;
+  match.winHow=null;
+  match.stripped=null;
+  match.heroRebuy=false;
+  match.kinRebuy=false;
+  match.potWon=0;
+  match.heroScore=null;
+  match.kinScore=null;
+  match.heroHandName='';
+  match.kinHandName='';
+  match.onlyCallOrFold=false;
+  match.lastRaiseBy=match.bb;
+  match.oddChipTo=null;
+
+  var sb = match.button==='hero' ? match.hero : match.kin;
+  var bb = match.button==='hero' ? match.kin : match.hero;
+  putChips(sb, match.sb);
+  putChips(bb, match.bb);
+
+  match.hero.hole.push(match.deck.pop());
+  match.kin.hole.push(match.deck.pop());
+  match.hero.hole.push(match.deck.pop());
+  match.kin.hole.push(match.deck.pop());
+
+  match.currentBet = Math.max(match.hero.bet, match.kin.bet);
+  match.hero.acted=false;
+  match.kin.acted=false;
+  if (bettingDone(match)){
+    match.toAct=null;
+    advanceStreet(match);
+  } else {
+    match.toAct = nextToAct(match, match.button);
+  }
+  return match;
+}
+function nextToAct(match, start){
+  var order=[start, other(start)], i, p;
+  for (i=0;i<2;i++){
+    p=match[order[i]];
+    if (!p.folded && !p.allin) return order[i];
+  }
+  return null;
+}
+function toCall(match, who){
+  return Math.max(0, match.currentBet - match[who].bet);
+}
+function potOf(match){
+  return match.hero.committed + match.kin.committed;
+}
+function bettingDone(match){
+  var h=match.hero, k=match.kin;
+  if (h.folded || k.folded) return true;
+  var actors=[];
+  if (!h.folded && !h.allin) actors.push('hero');
+  if (!k.folded && !k.allin) actors.push('kin');
+  if (actors.length===0) return true;
+  if (actors.length===1){
+    var a=match[actors[0]], b=match[other(actors[0])];
+    if (b.allin && a.bet>=b.bet) return true;
+    return a.acted && a.bet>=b.bet;
+  }
+  return h.acted && k.acted && h.bet===k.bet;
+}
+function legalActions(match, who){
+  if (!match || match.handOver || match.toAct!==who) return [];
+  var p=match[who], o=match[other(who)];
+  if (p.folded || p.allin) return [];
+  var tc = toCall(match, who);
+  var out=[{type:'fold'}];
+  if (tc<=0) out.push({type:'check'});
+  else if (p.stack>tc) out.push({type:'call', amount:tc});
+  var canRaise = !o.allin && p.stack>tc && !match.onlyCallOrFold;
+  var minTo = match.currentBet + match.lastRaiseBy;
+  var maxTo = p.bet + p.stack;
+  if (match.currentBet===0) minTo = match.bb;
+  if (canRaise && minTo<=maxTo){
+    out.push({type:'raise', minTo:minTo, maxTo:maxTo, currentBet:match.currentBet, lastRaiseBy:match.lastRaiseBy});
+  }
+  if (p.stack>0) out.push({type:'allin', amount:maxTo});
+  return out;
+}
+function describeAction(a){
+  if (!a) return '';
+  if (a.type==='fold') return 'fold';
+  if (a.type==='check') return 'check';
+  if (a.type==='call') return 'call'+(a.amount!=null?(' '+a.amount):'');
+  if (a.type==='raise') return 'raise to '+(a.to!=null?a.to:a.minTo);
+  if (a.type==='allin') return 'all-in';
+  return a.type;
+}
+function legalText(legal){
+  return legal.map(function(a){
+    if (a.type==='raise') return 'raise TO '+a.minTo+'-'+a.maxTo;
+    if (a.type==='call') return 'call '+a.amount;
+    if (a.type==='allin') return 'all-in ('+a.amount+')';
+    return a.type;
+  }).join(', ');
+}
+function parseAction(text, legal){
+  if (!legal || !legal.length) return null;
+  var raw=String(text||'');
+  var t=raw.replace(/[*_`]/g,' ').replace(/\s+/g,' ').trim();
+  if (!t) return null;
+  var first=t.split(/[.!\n]/)[0] || t;
+  var scopes=[first, t.slice(0,160), t];
+  function has(type){ return legal.some(function(a){ return a.type===type; }); }
+  function get(type){ for (var i=0;i<legal.length;i++) if (legal[i].type===type) return legal[i]; }
+  function negated(low, verb){
+    return new RegExp("\\b(don't|dont|do not|never|won't|wont|not (?:going to|gonna))\\s+(?:\\w+\\s+){0,2}"+verb+"\\b").test(low);
+  }
+  var s, i;
+  for (i=0;i<scopes.length;i++){
+    s=scopes[i];
+    var low=s.toLowerCase();
+    if (/\b(all[\s-]*in|shove|shoving|jam(?:ming)?)\b/.test(low) && has('allin')) return {type:'allin'};
+    var amt=null, m;
+    m = low.match(/\braise\s+by\s+\$?\s*(\d{1,6})\b/) ||
+        low.match(/\b(?:raise(?:\s+it)?(?:\s+to)?|bet(?:\s+of)?|make\s+it|to)\s+\$?\s*(\d{1,6})\b/) ||
+        low.match(/\b(?:raise|bet)\s*\$?\s*(\d{1,6})\b/);
+    if (m) amt=+m[1];
+    if (amt!=null && has('raise')){
+      var r=get('raise'), to=amt;
+      if (amt<r.minTo && (r.currentBet+amt)>=r.minTo && (r.currentBet+amt)<=r.maxTo) to=r.currentBet+amt;
+      if (to>=r.minTo && to<=r.maxTo) return {type:'raise', to:to};
+      if (to>=r.maxTo && has('allin')) return {type:'allin'};
+    }
+    if (/\b(raise|re-?raise|bet)\b/.test(low) && amt==null && has('raise')) return {type:'raise', to:get('raise').minTo};
+    if (!negated(low,'fold') && /\b(fold(?:s|ed|ing)?|muck(?:s|ed)?)\b/.test(low) && has('fold')) return {type:'fold'};
+    if (!negated(low,'check') && /\bcheck(?:s|ed|ing)?\b/.test(low) && has('check')) return {type:'check'};
+    if (!negated(low,'call') && /\bcall(?:s|ed|ing)?\b/.test(low)){
+      if (has('call')) return {type:'call'};
+      if (has('allin')) return {type:'allin'};
+    }
+  }
+  return null;
+}
+function fallbackAction(legal, hole, board){
+  if (!legal || !legal.length) return null;
+  function get(type){ for (var i=0;i<legal.length;i++) if (legal[i].type===type) return legal[i]; }
+  if (get('check')) return {type:'check'};
+  var str = (hole && hole.length) ? strength01(hole, board||[]) : 0.3;
+  var call=get('call');
+  if (call && (str>=0.35 || call.amount<=40)) return {type:'call'};
+  if (get('fold') && str<0.35) return {type:'fold'};
+  if (call) return {type:'call'};
+  if (get('allin') && str>=0.7) return {type:'allin'};
+  if (get('fold')) return {type:'fold'};
+  return legal[0].type==='raise' ? {type:'raise', to:legal[0].minTo} : {type:legal[0].type};
+}
+function applyAction(match, who, action){
+  if (match.handOver) return {ok:false, error:'hand is over'};
+  if (match.toAct!==who) return {ok:false, error:'not your turn'};
+  var legal=legalActions(match, who);
+  var p=match[who], o=match[other(who)];
+  function isLegal(type){ return legal.some(function(a){ return a.type===type; }); }
+  if (action && action.type==='call' && !isLegal('call') && isLegal('allin')) action={type:'allin'};
+  if (!action || !action.type || !isLegal(action.type)) return {ok:false, error:'illegal action'};
+
+  if (action.type==='fold'){
+    p.folded=true; p.acted=true;
+    endHand(match, other(who), 'fold');
+    return {ok:true, handEnded:true};
+  }
+  if (action.type==='check'){
+    if (toCall(match, who)!==0) return {ok:false, error:'cannot check'};
+    p.acted=true;
+  } else if (action.type==='call'){
+    var tc=toCall(match, who);
+    if (tc<=0) return {ok:false, error:'nothing to call'};
+    putChips(p, tc);
+    p.acted=true;
+  } else if (action.type==='raise'){
+    var L=legal.filter(function(a){ return a.type==='raise'; })[0];
+    var to=action.to;
+    if (to==null) to=L.minTo;
+    if (to<L.minTo || to>L.maxTo) return {ok:false, error:'bad raise size'};
+    putChips(p, to-p.bet);
+    var raiseBy=p.bet-match.currentBet;
+    match.currentBet=p.bet;
+    if (raiseBy>=match.lastRaiseBy) match.lastRaiseBy=raiseBy;
+    match.onlyCallOrFold=false;
+    o.acted=false;
+    p.acted=true;
+  } else if (action.type==='allin'){
+    var before=p.bet;
+    putChips(p, p.stack);
+    p.allin=true;
+    p.acted=true;
+    if (p.bet>match.currentBet){
+      var raiseBy2=p.bet-match.currentBet;
+      var full=raiseBy2>=match.lastRaiseBy;
+      match.currentBet=p.bet;
+      if (full){
+        match.lastRaiseBy=raiseBy2;
+        match.onlyCallOrFold=false;
+      } else {
+        match.onlyCallOrFold = !!o.acted;
+      }
+      o.acted=false;
+    }
+  }
+
+  if (bettingDone(match)){
+    match.toAct=null;
+    advanceStreet(match);
+  } else {
+    match.toAct=nextToAct(match, other(who));
+  }
+  return {ok:true, handEnded:!!match.handOver, street:match.street, toAct:match.toAct};
+}
+function dealFlop(match){
+  match.deck.pop();
+  match.board.push(match.deck.pop(), match.deck.pop(), match.deck.pop());
+}
+function dealOne(match){
+  match.deck.pop();
+  match.board.push(match.deck.pop());
+}
+function advanceStreet(match){
+  if (match.hero.folded){ endHand(match, 'kin', 'fold'); return; }
+  if (match.kin.folded){ endHand(match, 'hero', 'fold'); return; }
+  match.hero.bet=0; match.kin.bet=0;
+  match.hero.acted=false; match.kin.acted=false;
+  match.currentBet=0;
+  match.lastRaiseBy=match.bb;
+  match.onlyCallOrFold=false;
+  if (match.street==='preflop'){ dealFlop(match); match.street='flop'; }
+  else if (match.street==='flop'){ dealOne(match); match.street='turn'; }
+  else if (match.street==='turn'){ dealOne(match); match.street='river'; }
+  else if (match.street==='river'){ showdown(match); return; }
+  else { showdown(match); return; }
+  if (bettingDone(match)){
+    match.toAct=null;
+    advanceStreet(match);
+    return;
+  }
+  match.toAct=nextToAct(match, other(match.button));
+}
+function showdown(match){
+  var hs=evaluate(match.hero.hole.concat(match.board));
+  var ks=evaluate(match.kin.hole.concat(match.board));
+  match.heroScore=hs; match.kinScore=ks;
+  match.heroHandName=nameHand(hs);
+  match.kinHandName=nameHand(ks);
+  var c=compare(hs, ks);
+  if (c>0) endHand(match, 'hero', 'showdown');
+  else if (c<0) endHand(match, 'kin', 'showdown');
+  else endHand(match, null, 'split');
+}
+function endHand(match, winner, how){
+  match.handOver=true;
+  match.toAct=null;
+  match.winHow=how;
+  match.winner=winner;
+  match.split=!winner;
+  if (how==='showdown' || how==='split') match.street='showdown';
+
+  var hc=match.hero.committed, kc=match.kin.committed;
+  if (hc>kc){ match.hero.stack += (hc-kc); match.hero.committed=kc; }
+  if (kc>hc){ match.kin.stack += (kc-hc); match.kin.committed=hc; }
+  var pot=match.hero.committed+match.kin.committed;
+  match.potWon=pot;
+  if (winner==='hero') match.hero.stack += pot;
+  else if (winner==='kin') match.kin.stack += pot;
+  else {
+    var half=Math.floor(pot/2), odd=pot-2*half;
+    match.hero.stack += half;
+    match.kin.stack += half;
+    if (odd){
+      var bb=other(match.button);
+      match[bb].stack += odd;
+      match.oddChipTo=bb;
+    }
+  }
+  match.hero.committed=0; match.kin.committed=0;
+
+  match.stripped=null;
+  if (match.strip && winner){
+    var loser=other(winner);
+    var piece=removePiece(match[loser]);
+    match.stripped={who:loser, piece:piece};
+    if (piece && match[loser].clothesOn.length===0){
+      match.matchOver=true;
+      match.matchWinner=winner;
+      match.matchWhy='clothes';
+    }
+  }
+  if (!match.matchOver){
+    if (match.strip){
+      if (match.hero.stack===0 && match.hero.clothesOn.length){ match.hero.stack=match.startingStack; match.heroRebuy=true; }
+      if (match.kin.stack===0 && match.kin.clothesOn.length){ match.kin.stack=match.startingStack; match.kinRebuy=true; }
+    } else {
+      if (match.hero.stack===0 && match.kin.stack===0){ match.matchOver=true; match.matchWinner=null; match.matchWhy='chips'; }
+      else if (match.hero.stack===0){ match.matchOver=true; match.matchWinner='kin'; match.matchWhy='chips'; }
+      else if (match.kin.stack===0){ match.matchOver=true; match.matchWinner='hero'; match.matchWhy='chips'; }
+    }
+  }
+}
+
+function promptState(match, kinName, heroName){
+  kinName=kinName||'Kin'; heroName=heroName||'You';
+  var lines=[];
+  var have=(heroName==='I'||/^you$/i.test(String(heroName)))?'have':'has';
+  lines.push('You have '+match.kin.stack+' chips; '+heroName+' '+have+' '+match.hero.stack+'. Pot is '+potOf(match)+'. Blinds '+match.sb+'/'+match.bb+'.');
+  lines.push('Your hole cards: '+formatCards(match.kin.hole)+'.');
+  lines.push('Board: '+(match.board.length?formatCards(match.board):'(no community cards yet)')+'.');
+  lines.push('Street: '+match.street+'.');
+  var tc=toCall(match, 'kin');
+  lines.push(tc>0 ? ('To call: '+tc+'.') : 'To call: 0 (you may check or bet).');
+  var legal=legalActions(match, 'kin');
+  lines.push('Legal actions: '+legalText(legal)+'.');
+  lines.push('Hand hint (private, for you): '+describeStrength(match.kin.hole, match.board));
+  return lines.join(' ');
+}
+
+return {
+  DEFAULT_CLOTHES: DEFAULT_CLOTHES,
+  RANK_CHAR: RANK_CHAR,
+  SUIT_SYM: SUIT_SYM,
+  parseCard: parseCard,
+  cardKey: cardKey,
+  formatCard: formatCard,
+  formatCards: formatCards,
+  isRed: isRed,
+  makeDeck: makeDeck,
+  shuffleDeck: shuffleDeck,
+  makeStackedDeck: makeStackedDeck,
+  evaluate: evaluate,
+  compare: compare,
+  nameHand: nameHand,
+  describeHole: describeHole,
+  describeStrength: describeStrength,
+  strength01: strength01,
+  parseClothes: parseClothes,
+  removePiece: removePiece,
+  other: other,
+  newMatch: newMatch,
+  startHand: startHand,
+  legalActions: legalActions,
+  legalText: legalText,
+  parseAction: parseAction,
+  fallbackAction: fallbackAction,
+  describeAction: describeAction,
+  applyAction: applyAction,
+  toCall: toCall,
+  pot: potOf,
+  bettingDone: bettingDone,
+  promptState: promptState
+};
+})();
+if (typeof module!=='undefined' && module.exports) module.exports = KinPoker;
+
+
+
 /* Kin Studio — Games tab. The app is the referee and keeps the true game state;
    the Kin plays through the Kindroid API (/send-message) using the saved kn_ key. */
 (function(){
@@ -4494,7 +5163,7 @@ var STORY_SETTINGS = [
   {id:'mystery', label:'Small-town mystery', text:'A rainy small town where someone has gone missing, and everyone has a secret.'},
   {id:'custom', label:'Type my own…', text:''}
 ];
-var GAME_NAMES = {trivia:'Sword of Truth trivia', twenty:'20 Questions', chess:'Chess', ttt:'Tic-tac-toe', c4:'Connect Four', story:'Story adventure', wyr:'Would You Rather'};
+var GAME_NAMES = {trivia:'Sword of Truth trivia', twenty:'20 Questions', chess:'Chess', ttt:'Tic-tac-toe', c4:'Connect Four', story:'Story adventure', wyr:'Would You Rather', poker:'Texas Hold\'em'};
 
 function $g(id){ return document.getElementById(id); }
 function E(s){ return (typeof esc==='function') ? esc(s) : String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -5119,8 +5788,301 @@ var wyr = {
   }
 };
 
-var GAMES={trivia:trivia, twenty:twenty, chess:chess, ttt:ttt, c4:c4, story:story, wyr:wyr};
-G.GAMES=GAMES; G.parse={chess:chess.parse, yesNo:yesNo, choices:story.parseChoices, letter:trivia.parseLetter};
+/* Texas Hold'em vs Kin — uses KinPoker as the referee. */
+function adultsOn(){
+  try{
+    if ($g('adultsOnly')) return !!$g('adultsOnly').checked;
+    return !!(store.get('settings',{})||{}).adults_only;
+  }catch(_){ return false; }
+}
+G.refreshAdults=function(){ if (G.game==='poker' && !G.started) poker.setup($g('gmArea')); };
+
+function kinPokerMove(o){
+  ask(o.prompt, function(text){
+    var mv=o.parse(text);
+    if (mv!=null){ o.apply(mv,'kin'); return; }
+    logLine('sys','No legal action found in that reply — asking once more.',{cls:'warn'});
+    ask('('+o.name+') I couldn\'t find a legal action in that. Choose exactly one of: '+o.legalText()+'. Reply with the action first.', function(t2){
+      var mv2=o.parse(t2);
+      if (mv2!=null){ o.apply(mv2,'kin'); return; }
+      var r=o.fallback();
+      logLine('sys','Still no legal action — the app chose '+o.label(r)+' for '+kinName()+'.',{cls:'warn'});
+      o.apply(r,'fallback');
+    });
+  }, { onFail: function(){
+    var area=$g('gmArea');
+    if (area && !area.querySelector('.gm-randbtn')){
+      var r=el('div','row gm-randbtn');
+      r.appendChild(btn('Pick a fallback action for '+kinName(),'secondary',function(){
+        r.remove();
+        var m=o.fallback();
+        logLine('sys','Fallback action for '+kinName()+': '+o.label(m)+'.',{cls:'warn'});
+        o.apply(m,'fallback');
+      }));
+      area.appendChild(r);
+    }
+  }});
+}
+
+function pkCardEl(c, face){
+  if (!face){
+    var b=el('div','pk-card back');
+    b.setAttribute('aria-label','facedown card');
+    b.innerHTML='<span class="s">\u2726</span>';
+    return b;
+  }
+  var card=KinPoker.parseCard(c);
+  var d=el('div','pk-card '+(KinPoker.isRed(card)?'red':'blk'));
+  d.setAttribute('aria-label', KinPoker.formatCard(card));
+  d.innerHTML='<span class="r">'+KinPoker.RANK_CHAR[card.r]+'</span><span class="s">'+KinPoker.SUIT_SYM[card.s]+'</span>';
+  return d;
+}
+function pkSlot(){ var d=el('div','pk-card slot'); d.setAttribute('aria-hidden','true'); return d; }
+
+var poker = {
+  setup: function(area){
+    var st=G.st;
+    st.strip = !!(st.strip && adultsOn());
+    if (st.stripPref==null) st.stripPref = !!(store.get('poker_strip', false));
+    area.innerHTML='';
+    area.appendChild(el('p','hint','Texas Hold\'em, heads-up no-limit. The app is the dealer and keeps the real cards, pot and stacks. You see your hole cards; '+E(kinName())+'\'s cards stay hidden until showdown. Blinds 10 / 20. Starting stacks 1,000.'));
+    if (adultsOn()){
+      var sw=el('label','hint');
+      sw.style.cssText='display:flex;align-items:center;gap:8px;margin:8px 0';
+      var cb=el('input'); cb.type='checkbox'; cb.id='pkStrip'; cb.checked=!!st.stripPref; cb.style.width='auto'; cb.style.margin='0';
+      cb.onchange=function(){ st.stripPref=!!cb.checked; store.set('poker_strip', st.stripPref); poker.setup($g('gmArea')); };
+      sw.appendChild(cb); sw.appendChild(document.createTextNode('Strip mode'));
+      area.appendChild(sw);
+      if (cb.checked){
+        st.strip=true;
+        area.appendChild(el('p','hint','The loser of each hand takes off one piece of clothing (outermost first). If a player runs out of chips, they lose that piece and buy back in for a fresh 1,000-chip stack so the clothes match can continue. First player with nothing left loses. You can quit anytime. If a hand ties, nobody removes a piece.'));
+        area.appendChild(el('label','','Your clothes (outermost first, comma or new line)'));
+        var ha=el('textarea'); ha.id='pkHeroClothes'; ha.rows=2; ha.value=store.get('poker_hero_clothes','')||KinPoker.DEFAULT_CLOTHES.join(', '); area.appendChild(ha);
+        area.appendChild(el('label','',E(kinName())+'\'s clothes (outermost first)'));
+        var ka=el('textarea'); ka.id='pkKinClothes'; ka.rows=2; ka.value=store.get('poker_kin_clothes','')||KinPoker.DEFAULT_CLOTHES.join(', '); area.appendChild(ka);
+        var dr=el('div','row');
+        dr.appendChild(btn('Use defaults','secondary',function(){ ha.value=KinPoker.DEFAULT_CLOTHES.join(', '); ka.value=KinPoker.DEFAULT_CLOTHES.join(', '); }));
+        area.appendChild(dr);
+      } else st.strip=false;
+    } else {
+      st.strip=false;
+    }
+    var r=el('div','row');
+    r.appendChild(btn('Start match','',function(){ if (ensureReady()) poker.start(); }));
+    area.appendChild(r);
+  },
+  start: function(){
+    var st=G.st;
+    var strip=!!(adultsOn() && $g('pkStrip') && $g('pkStrip').checked);
+    var heroC=$g('pkHeroClothes')?$g('pkHeroClothes').value:'';
+    var kinC=$g('pkKinClothes')?$g('pkKinClothes').value:'';
+    if (strip){
+      store.set('poker_hero_clothes', heroC);
+      store.set('poker_kin_clothes', kinC);
+      store.set('poker_strip', true);
+    }
+    st.match=KinPoker.newMatch({
+      strip:strip,
+      heroClothes:heroC,
+      kinClothes:kinC,
+      startingStack:1000, sb:10, bb:20, button:'hero'
+    });
+    G.started=true;
+    logLine('sys','Texas Hold\'em vs '+kinName()+(strip?' — strip mode.':'')+' The app is dealing.');
+    poker.nextHand();
+  },
+  nextHand: function(){
+    var m=G.st.match;
+    if (!m || m.matchOver){ poker.setup($g('gmArea')); return; }
+    KinPoker.startHand(m);
+    var btnName = m.button==='hero' ? 'You' : kinName();
+    logLine('sys','Hand '+m.handNo+'. '+btnName+' is the button (small blind).');
+    poker.draw();
+    if (m.handOver) poker.onHandEnd();
+    else if (m.toAct==='kin') poker.kinTurn();
+    else status('Your turn.');
+  },
+  draw: function(){
+    var st=G.st, m=st.match, area=$g('gmArea');
+    if (!m){ poker.setup(area); return; }
+    area.innerHTML='';
+    var table=el('div','pk-table');
+
+    var kinSeat=el('div','pk-seat');
+    kinSeat.appendChild(el('div','pk-name',E(kinName())+' · '+m.kin.stack+' chips'+(m.kin.allin && !m.handOver?' · all-in':'')));
+    var kinRow=el('div','pk-row'); kinRow.id='pkKinCards';
+    var showKin = m.handOver && (m.winHow==='showdown' || m.winHow==='split');
+    (m.kin.hole.length?m.kin.hole:[null,null]).forEach(function(c){ kinRow.appendChild(c?pkCardEl(c, showKin):pkCardEl(null,false)); });
+    kinSeat.appendChild(kinRow);
+    if (showKin && m.kinHandName) kinSeat.appendChild(el('div','pk-street',E(m.kinHandName)));
+    table.appendChild(kinSeat);
+
+    var mid=el('div','pk-seat');
+    mid.appendChild(el('div','pk-pot','Pot '+KinPoker.pot(m)+(m.handOver && m.potWon?' · awarded '+m.potWon:'')));
+    mid.appendChild(el('div','pk-street', (m.handOver?(m.split?'Split pot':(m.winner==='hero'?'You win the hand':kinName()+' wins the hand')): (m.street.charAt(0).toUpperCase()+m.street.slice(1))) ));
+    var board=el('div','pk-row'); board.id='pkBoard';
+    for (var i=0;i<5;i++){
+      if (m.board[i]) board.appendChild(pkCardEl(m.board[i], true));
+      else board.appendChild(pkSlot());
+    }
+    mid.appendChild(board);
+    table.appendChild(mid);
+
+    var heroSeat=el('div','pk-seat');
+    heroSeat.appendChild(el('div','pk-name','You · '+m.hero.stack+' chips'+(m.hero.allin && !m.handOver?' · all-in':'')));
+    var heroRow=el('div','pk-row'); heroRow.id='pkHeroCards';
+    m.hero.hole.forEach(function(c){ heroRow.appendChild(pkCardEl(c, true)); });
+    heroSeat.appendChild(heroRow);
+    if (m.handOver && m.heroHandName) heroSeat.appendChild(el('div','pk-street',E(m.heroHandName)));
+    table.appendChild(heroSeat);
+    area.appendChild(table);
+
+    if (m.strip){
+      var cl=el('div','pk-clothes');
+      cl.innerHTML='You are wearing: '+E(m.hero.clothesOn.join(', ')||'nothing')+'<br>You removed: '+E(m.hero.clothesOff.join(', ')||'—')+'<br>'+E(kinName())+' is wearing: '+E(m.kin.clothesOn.join(', ')||'nothing')+'<br>'+E(kinName())+' removed: '+E(m.kin.clothesOff.join(', ')||'—');
+      area.appendChild(cl);
+    }
+
+    if (!m.handOver && m.toAct==='hero'){
+      var tc=KinPoker.toCall(m,'hero');
+      area.appendChild(el('p','hint', tc>0 ? ('To call: '+tc+'.') : 'You may check or bet.'));
+      var legal=KinPoker.legalActions(m,'hero');
+      var actions=el('div','row');
+      legal.forEach(function(a){
+        if (a.type==='fold') actions.appendChild(btn('Fold','secondary',function(){ poker.heroAct({type:'fold'}); }));
+        if (a.type==='check') actions.appendChild(btn('Check','',function(){ poker.heroAct({type:'check'}); }));
+        if (a.type==='call') actions.appendChild(btn('Call '+a.amount,'',function(){ poker.heroAct({type:'call'}); }));
+        if (a.type==='allin') actions.appendChild(btn('All-in ('+a.amount+')','danger',function(){ poker.heroAct({type:'allin'}); }));
+      });
+      area.appendChild(actions);
+      var raise=legal.filter(function(a){ return a.type==='raise'; })[0];
+      if (raise){
+        var rr=el('div','pk-raise');
+        var inp=el('input'); inp.type='number'; inp.id='pkRaiseTo'; inp.min=raise.minTo; inp.max=raise.maxTo; inp.step='1'; inp.value=raise.minTo; inp.setAttribute('aria-label','Raise to');
+        rr.appendChild(inp);
+        rr.appendChild(btn(m.currentBet>0?'Raise to':'Bet', '', function(){
+          var n=parseInt(($g('pkRaiseTo')&&$g('pkRaiseTo').value)||'',10);
+          if (isNaN(n)) n=raise.minTo;
+          poker.heroAct({type:'raise', to:n});
+        }));
+        area.appendChild(rr);
+        area.appendChild(el('p','hint','Raise to between '+raise.minTo+' and '+raise.maxTo+'.'));
+      }
+    } else if (!m.handOver){
+      area.appendChild(el('p','hint', kinName()+' to act…'));
+    }
+
+    if (m.handOver){
+      var msg;
+      if (m.split) msg='Split pot'+(m.heroHandName?' — both have '+m.heroHandName:'')+'.';
+      else if (m.winHow==='fold') msg=(m.winner==='hero'?kinName()+' folded — you win.':'You folded — '+kinName()+' wins.');
+      else msg=(m.winner==='hero'?'You win':' '+kinName()+' wins')+' with '+(m.winner==='hero'?m.heroHandName:m.kinHandName)+'.';
+      if (m.stripped && m.stripped.piece){
+        msg += ' '+(m.stripped.who==='hero' ? 'You remove ' : (kinName()+' removes '))+m.stripped.piece+'.';
+      }
+      if (m.heroRebuy) msg += ' You bought back in for '+m.startingStack+'.';
+      if (m.kinRebuy) msg += ' '+kinName()+' bought back in for '+m.startingStack+'.';
+      if (m.matchOver){
+        if (m.matchWhy==='clothes') msg += ' '+(m.matchWinner==='hero'?kinName()+' has nothing left — you win the match.':'You have nothing left — '+kinName()+' wins the match.');
+        else msg += ' '+(m.matchWinner==='hero'?kinName()+' is out of chips — you win the match.':'You are out of chips — '+kinName()+' wins the match.');
+      }
+      area.appendChild(el('p','hint', E(msg).replace(/^ /,'')));
+      var end=el('div','row');
+      if (!m.matchOver) end.appendChild(btn('Next hand','',function(){ poker.nextHand(); }));
+      end.appendChild(btn(m.matchOver?'Play again':'New match','secondary',function(){ poker.setup($g('gmArea')); G.started=false; }));
+      area.appendChild(end);
+    } else {
+      var extra=el('div','row');
+      extra.appendChild(btn('New match','secondary',function(){ if (!G.started || confirm('Leave this match?')) { G.started=false; poker.setup($g('gmArea')); } }));
+      area.appendChild(extra);
+    }
+    $g('gmScore').textContent = 'You '+m.hero.stack+' · '+kinName()+' '+m.kin.stack+(m.strip?' · strip':'');
+  },
+  heroAct: function(action){
+    var m=G.st.match;
+    if (!m || G.busy || m.toAct!=='hero' || m.handOver) return;
+    var r=KinPoker.applyAction(m,'hero',action);
+    if (!r.ok){ status(r.error||'Illegal action.','error'); poker.draw(); return; }
+    logLine('user', KinPoker.describeAction(action.type==='raise'?action:{type:action.type, amount:action.amount, to:action.to}));
+    poker.after(r);
+  },
+  applyKin: function(action){
+    var m=G.st.match;
+    var r=KinPoker.applyAction(m,'kin',action);
+    if (!r.ok){
+      logLine('sys','Could not apply '+KinPoker.describeAction(action)+' ('+(r.error||'illegal')+').',{cls:'err'});
+      var fb=KinPoker.fallbackAction(KinPoker.legalActions(m,'kin'), m.kin.hole, m.board);
+      if (fb){ r=KinPoker.applyAction(m,'kin',fb); logLine('sys','Fallback: '+KinPoker.describeAction(fb)+'.',{cls:'warn'}); }
+    } else {
+      logLine('sys', kinName()+' chose to '+KinPoker.describeAction(action)+'.');
+    }
+    poker.after(r||{ok:false});
+  },
+  after: function(r){
+    var m=G.st.match;
+    poker.draw();
+    if (m.handOver) poker.onHandEnd();
+    else if (m.toAct==='kin') poker.kinTurn();
+    else status('Your turn.');
+  },
+  kinTurn: function(){
+    var m=G.st.match;
+    if (!m || m.handOver || m.toAct!=='kin') return;
+    var legal=KinPoker.legalActions(m,'kin');
+    if (!legal.length){ poker.draw(); return; }
+    var prompt='(Game: Texas Hold\'em) Heads-up no-limit. '+KinPoker.promptState(m, kinName(), 'I')+' Reply with your action first (fold, check, call, raise TO an amount, or all-in), then any table talk.';
+    if (m.strip){
+      prompt += ' Clothing — I am wearing '+(m.hero.clothesOn.join(', ')||'nothing')+' (removed: '+(m.hero.clothesOff.join(', ')||'nothing')+'). You are wearing '+(m.kin.clothesOn.join(', ')||'nothing')+' (removed: '+(m.kin.clothesOff.join(', ')||'nothing')+'). This is a light-hearted adults-only clothes game among consenting adults. React in character however you normally would; do not go further than your usual chat.';
+    }
+    kinPokerMove({
+      name:'Texas Hold\'em',
+      prompt:prompt,
+      legalText:function(){ return KinPoker.legalText(legal); },
+      parse:function(t){ return KinPoker.parseAction(t, legal); },
+      fallback:function(){ return KinPoker.fallbackAction(legal, m.kin.hole, m.board); },
+      label:function(a){ return KinPoker.describeAction(a); },
+      apply:function(a){ poker.applyKin(a); }
+    });
+  },
+  onHandEnd: function(){
+    var m=G.st.match;
+    poker.draw();
+    if (m.split) logLine('sys','Split pot'+(m.heroHandName?' — '+m.heroHandName:'')+'.');
+    else if (m.winHow==='fold') logLine('sys', m.winner==='hero'? kinName()+' folded — you win the hand.' : 'You folded — '+kinName()+' wins the hand.');
+    else logLine('sys', (m.winner==='hero'?'You win':' '+kinName()+' wins')+' with '+(m.winner==='hero'?m.heroHandName:m.kinHandName)+'.');
+    if (m.stripped && m.stripped.piece) logLine('sys', (m.stripped.who==='hero'?'You remove':' '+kinName()+' removes')+' '+m.stripped.piece+'.');
+    if (m.matchOver){
+      bumpStat('poker', m.matchWinner==='hero'?'win':(m.matchWinner==='kin'?'loss':'draw'));
+      $g('gmScore').textContent=statLine('poker');
+    }
+    var parts=['(Game: Texas Hold\'em)'];
+    if (m.winHow==='fold'){
+      parts.push(m.winner==='hero'?'I win — you folded.':'You win — I folded.');
+    } else if (m.split){
+      parts.push('Split pot. Your cards: '+KinPoker.formatCards(m.kin.hole)+' ('+m.kinHandName+'). My cards: '+KinPoker.formatCards(m.hero.hole)+' ('+m.heroHandName+'). Board: '+KinPoker.formatCards(m.board)+'.');
+    } else {
+      parts.push('Showdown. Your cards: '+KinPoker.formatCards(m.kin.hole)+' ('+m.kinHandName+'). My cards: '+KinPoker.formatCards(m.hero.hole)+' ('+m.heroHandName+'). Board: '+KinPoker.formatCards(m.board)+'.');
+      parts.push(m.winner==='hero' ? ('I win with '+m.heroHandName+'.') : ('You win with '+m.kinHandName+'.'));
+    }
+    parts.push('The pot was '+m.potWon+'. Stacks: I have '+m.hero.stack+', you have '+m.kin.stack+'.');
+    if (m.stripped && m.stripped.piece){
+      if (m.stripped.who==='kin') parts.push('You lost the hand, so you remove your '+m.stripped.piece+'. You are still wearing: '+(m.kin.clothesOn.join(', ')||'nothing')+'.');
+      else parts.push('I lost the hand, so I remove my '+m.stripped.piece+'. I am still wearing: '+(m.hero.clothesOn.join(', ')||'nothing')+'.');
+      parts.push('React in character however you normally would. Do not go further than your usual chat. This is a light-hearted adults-only clothes game among consenting adults.');
+    }
+    if (m.heroRebuy) parts.push('I ran out of chips and bought back in for '+m.startingStack+'.');
+    if (m.kinRebuy) parts.push('You ran out of chips and bought back in for '+m.startingStack+'.');
+    if (m.matchOver){
+      if (m.matchWhy==='clothes') parts.push(m.matchWinner==='hero'?'That was your last piece — I win the match.':'That was my last piece — you win the match.');
+      else parts.push(m.matchWinner==='hero'?'You are out of chips — I win the match.':'I am out of chips — you win the match.');
+    }
+    ask(parts.join(' '), function(){ if (m.matchOver) G.started=false; });
+  }
+};
+
+
+var GAMES={trivia:trivia, twenty:twenty, chess:chess, ttt:ttt, c4:c4, story:story, wyr:wyr, poker:poker};
+G.GAMES=GAMES; G.parse={chess:chess.parse, yesNo:yesNo, choices:story.parseChoices, letter:trivia.parseLetter, poker:KinPoker.parseAction};
 
 /* ---------- wire up ---------- */
 function init(){

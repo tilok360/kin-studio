@@ -14,7 +14,7 @@ Each person uses their own Kindroid `kn_` key. Do not share yours.
 
 ## Games
 
-The app has a **Games** tab: Sword of Truth trivia, 20 Questions, Chess, Tic-tac-toe, Connect Four, a Story adventure where your Kin is the game master, and Would You Rather. Your Kin plays through the Kindroid API with your own `kn_` key, so game turns also show up in that Kin's Kindroid chat.
+The app has a **Games** tab: Sword of Truth trivia, 20 Questions, Chess, Tic-tac-toe, Connect Four, a Story adventure where your Kin is the game master, Would You Rather, and Texas Hold'em (heads-up vs your Kin). Optional strip-poker mode stays hidden until you turn on Adults-only (18+) in Settings and confirm you are 18 or older. Your Kin plays through the Kindroid API with your own `kn_` key, so game turns also show up in that Kin's Kindroid chat.
 
 ## License
 
