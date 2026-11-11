@@ -1760,7 +1760,7 @@ function mapRawToChar(raw, voiceId){
   return {
     id: raw.id||uid(),
     name: raw.name||'Character',
-    ai_id: raw.ai_id||raw.aiId||raw.kinId||'',
+    ai_id: String(raw.ai_id||raw.aiId||raw.kinId||'').trim(),
     voice_id: voiceId||raw.voice_id||'',
     tag: raw.tag||raw.tagline||'',
     bio: raw.bio||'',
@@ -5417,12 +5417,14 @@ var G = { game:null, started:false, busy:false, lastPrompt:null, lastHandler:nul
 window.KinGames = G;
 
 /* ---------- Kin selection ---------- */
-function gameChars(){ try{ return (chars()||[]).filter(function(c){ return c && c.ai_id; }); }catch(_){ return []; } }
+function gameChars(){ try{ return (chars()||[]).filter(function(c){ return c && String(c.ai_id||'').trim(); }); }catch(_){ return []; } }
+function kinAiId(c){ return String((c&&c.ai_id)||'').replace(/[\u200B-\u200D\uFEFF\u00A0]/g,'').trim(); }
 function currentKin(){ var id=$g('gmChar') && $g('gmChar').value; return gameChars().find(function(c){ return c.id===id; }) || null; }
 function kinName(){ var c=currentKin(); return (c && c.name) || 'Kin'; }
 function fillChars(){
   var sel=$g('gmChar'); if(!sel) return;
-  var cs=gameChars(), cur=sel.value || (store.get('games_lastChar','')) || (store.get('lastChatChar',''));
+  var chatSel=document.getElementById('chatChar');
+  var cs=gameChars(), cur=G.pickChar || (chatSel&&chatSel.value) || (store.get('lastChatChar','')) || sel.value;
   sel.innerHTML = cs.length ? cs.map(function(c){ return '<option value="'+E(c.id)+'">'+E(c.name||'Kin')+'</option>'; }).join('') : '<option value="">— add a character with an AI ID —</option>';
   if(cur && cs.some(function(c){ return c.id===cur; })) sel.value=cur;
   paintCharHint();
@@ -5432,7 +5434,7 @@ function paintCharHint(){
   if(!keyLooksGood(readApiKey())){ h.innerHTML='<span class="error">Paste the kn_ key in Settings first.</span>'; return; }
   if(!c){ h.innerHTML='<span class="error">Add a character with a Kindroid AI ID in the Characters tab.</span>'; return; }
   var v=null; try{ v=voiceForChar(c); }catch(_){}
-  h.textContent = (v && v.name ? 'Voice: '+v.name : 'No voice assigned — replies use the default voice') + '. Kindroid allows 10 messages every 30 seconds.';
+  h.textContent = 'AI ID '+kinAiId(c)+'. '+(v && v.name ? 'Voice: '+v.name : 'No voice assigned — replies use the default voice') + '. Kindroid allows 10 messages every 30 seconds.';
 }
 
 /* ---------- strip / status ---------- */
@@ -5478,7 +5480,11 @@ function rawSend(message, attempt){
   if(!c) return Promise.reject(new Error('Pick a character with a Kindroid AI ID.'));
   return waitForSlot().then(function(){
     G.sent.push(Date.now()); status(kinName()+' is thinking…');
-    return apiPost('/send-message', { ai_id:c.ai_id, message:message, stream:false });
+    var ms=G.timeoutMs||75000;
+    return Promise.race([
+      apiPost('/send-message', { ai_id:kinAiId(c), message:message, stream:false }),
+      new Promise(function(_,rej){ setTimeout(function(){ rej(new Error('Kindroid did not answer within '+Math.round(ms/1000)+' seconds.')); }, ms); })
+    ]);
   }).then(function(raw){
     var t = (typeof extractKindroidText==='function' ? extractKindroidText(raw) : String(raw||'')).trim();
     if(/^<\s*>/.test(t)) throw GenFail('Kindroid could not generate a reply this time ("< >").');
@@ -5491,6 +5497,7 @@ function rawSend(message, attempt){
       return countdown(30000,'Rate limit — trying again in').then(function(){ return rawSend(message, attempt+1); });
     }
     if(/^429|\b429\b/.test(msg)) throw new Error('Kindroid is still rate limiting (429). Wait a minute, then tap Retry.');
+    if(/^40[04]\b/.test(msg) && /not found/i.test(msg)) throw new Error(msg+' — Kindroid does not know the AI ID saved for '+((c&&c.name)||'this Kin')+' ('+kinAiId(c)+'). Pick the Kin you chat with under Play against, or paste its Kin ID (bottom of its Kin settings in Kindroid) in the Characters tab, save, then tap Retry.');
     throw e;
   });
 }
@@ -5504,7 +5511,7 @@ function ask(message, onReply, opts){
     G.lastKinText=text;
     if(!opts.silent) logLine('kin', text);
     setBusy(false); status('Your turn.');
-    var r; try{ r=onReply && onReply(text); }catch(err){ logLine('sys','Game error: '+err.message,{cls:'err'}); }
+    var r; try{ r=onReply && onReply(text); }catch(err){ setBusy(false); logLine('sys','Game error: '+err.message,{cls:'err'}); if($g('gmRetry')) $g('gmRetry').hidden=false; }
     if(!opts.silent) speak(text);
     return r;
   }).catch(function(e){
@@ -5527,10 +5534,10 @@ function statLine(game){ var s=(store.get('games_stats',{})||{})[game]||{}; if(g
 function openGame(id){
   if(G.game && G.started && G.game!==id && !confirm('Leave the current '+GAME_NAMES[G.game]+' game?')) return;
   try{ stopSpeaking(); }catch(_){}
-  G.game=id; G.started=false; G.st={}; G.lastPrompt=null;
+  G.game=id; G.started=false; G.st={}; G.lastPrompt=null; G.moveTok=(G.moveTok||0)+1;
   document.querySelectorAll('#gmPicker .gm-pick').forEach(function(b){ b.classList.toggle('on', b.dataset.game===id); });
   $g('gmStage').hidden=false; $g('gmTitle').textContent=GAME_NAMES[id]; $g('gmLog').innerHTML=''; $g('gmScore').textContent=statLine(id); $g('gmRetry').hidden=true;
-  status(''); store.set('games_lastChar', ($g('gmChar')||{}).value||'');
+  status('');
   GAMES[id].setup($g('gmArea'));
   try{ $g('gmStage').scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){}
 }
@@ -5540,7 +5547,7 @@ function endGame(){
   if(G.started){
     ask('(Game over: '+name+'. Thanks for playing — back to our normal chat now.)', function(){ G.started=false; });
   }
-  G.game=null;
+  G.game=null; G.moveTok=(G.moveTok||0)+1;
   document.querySelectorAll('#gmPicker .gm-pick').forEach(function(b){ b.classList.remove('on'); });
   $g('gmArea').innerHTML='<p class="hint">Game ended. Pick another game above.</p>';
 }
@@ -5759,18 +5766,49 @@ var twenty = {
    Shared "board game vs Kin" move protocol: legal list → parse → re-ask once → random fallback
    ===================================================================== */
 function kinMove(o){
-  // o: {prompt, legalText, parse(text)->move|null, apply(move, how), name}
-  ask(o.prompt, function(text){
-    var mv=o.parse(text);
-    if(mv!=null){ o.apply(mv,'kin'); return; }
-    logLine('sys','No legal move found in that reply — asking once more.',{cls:'warn'});
-    ask('('+o.name+') I couldn\'t find a legal move in that. Choose exactly one of: '+o.legalText()+'. Reply with just the move.', function(t2){
-      var mv2=o.parse(t2);
-      if(mv2!=null){ o.apply(mv2,'kin'); return; }
-      var r=o.random(); logLine('sys','Still no legal move — the app played a random legal move for '+kinName()+': '+o.label(r)+'.',{cls:'warn'});
-      o.apply(r,'random');
-    });
-  }, { onFail: function(){ var area=$g('gmArea'); if(area && !area.querySelector('.gm-randbtn')){ var r=el('div','row gm-randbtn'); r.appendChild(btn('Play a random move for '+kinName(),'secondary',function(){ r.remove(); var m=o.random(); logLine('sys','Random move for '+kinName()+': '+o.label(m)+'.',{cls:'warn'}); o.apply(m,'random'); })); area.appendChild(r); } } });
+  // o: {name, prompt, legalText(), parse(text)->move|null, random()|fallback(), label(move), apply(move, how), tag?, what?, noFormat?}
+  // Every kin turn ends in a move: kin reply -> one firm in-game re-ask -> the app moves for the kin (with a note).
+  // Network errors / timeouts never leave the board locked: the user gets Ask again / Let the app move / End game.
+  var pickFor = o.random || o.fallback, what = o.what || 'move', tag = o.tag || 'MOVE';
+  var tok = G.moveTok = (G.moveTok||0) + 1, game = G.game;
+  function live(){ return G.moveTok===tok && G.game===game; }
+  function clearOffer(){ var a=$g('gmArea'); if(a) a.querySelectorAll('.gm-randbtn').forEach(function(x){ x.remove(); }); }
+  function example(){ return String(o.legalText()||'').split(/,\s*/)[0] || '…'; }
+  function parseReply(text){
+    var t=String(text||''), m=t.match(new RegExp('\\b(?:'+tag+'|MOVE|ACTION)\\s*[:=\\-]\\s*([^\\n]{1,80})','i'));
+    if(m){ var v=o.parse(m[1]); if(v!=null) return v; }
+    return o.parse(t);
+  }
+  function autoMove(why){
+    if(!live()) return; clearOffer();
+    var mv=pickFor();
+    logLine('sys', why+' The app '+(what==='move'?'played ':'chose ')+o.label(mv)+' for '+kinName()+'.', {cls:'warn'});
+    status('');
+    o.apply(mv, o.random ? 'random' : 'fallback');
+  }
+  function offer(){
+    var area=$g('gmArea'); if(!area || !live()) return; clearOffer();
+    var r=el('div','row gm-randbtn');
+    r.appendChild(btn('Ask '+kinName()+' again','',function(){ r.remove(); step(1); }));
+    r.appendChild(btn('Let the app '+(what==='move'?'move':'choose')+' for '+kinName(),'secondary',function(){ autoMove('You let the app take this turn.'); }));
+    r.appendChild(btn('End game','danger',function(){ r.remove(); endGame(); }));
+    area.appendChild(r);
+    if($g('gmRetry')) $g('gmRetry').hidden=true;
+    status('No move from '+kinName()+' yet. Choose an option below.','warn');
+  }
+  var fmt = o.noFormat ? '' : ' It is your '+what+' now: you are playing this game with me, so make your choice. Start your reply with "'+tag+': " and one of the legal options (for example '+tag+': '+example()+'), then say anything you like.';
+  function step(n){
+    var prompt = n===0 ? o.prompt + fmt
+      : '('+o.name+', still your turn) We are in the middle of our game and I am waiting on your '+what+'. Stay in character, but you need to choose now. Legal options: '+o.legalText()+'.'+(o.noFormat ? ' Put your choice on the first line.' : ' Start your reply with "'+tag+': " and exactly one of them, for example '+tag+': '+example()+'.');
+    ask(prompt, function(text){
+      if(!live()) return;
+      var mv=parseReply(text);
+      if(mv!=null){ clearOffer(); o.apply(mv,'kin'); return; }
+      if(n===0){ logLine('sys', kinName()+' answered without a '+what+', so I asked once more in the game.', {cls:'warn'}); step(1); return; }
+      autoMove(kinName()+' still did not pick a '+what+'.');
+    }, { onFail: function(){ offer(); } });
+  }
+  step(0);
 }
 
 /* =====================================================================
@@ -6039,32 +6077,7 @@ function adultsOn(){
 }
 G.refreshAdults=function(){ if (G.game==='poker' && !G.started) poker.setup($g('gmArea')); };
 
-function kinPokerMove(o){
-  ask(o.prompt, function(text){
-    var mv=o.parse(text);
-    if (mv!=null){ o.apply(mv,'kin'); return; }
-    logLine('sys','No legal action found in that reply — asking once more.',{cls:'warn'});
-    ask('('+o.name+') I couldn\'t find a legal action in that. Choose exactly one of: '+o.legalText()+'. Reply with the action first.', function(t2){
-      var mv2=o.parse(t2);
-      if (mv2!=null){ o.apply(mv2,'kin'); return; }
-      var r=o.fallback();
-      logLine('sys','Still no legal action — the app chose '+o.label(r)+' for '+kinName()+'.',{cls:'warn'});
-      o.apply(r,'fallback');
-    });
-  }, { onFail: function(){
-    var area=$g('gmArea');
-    if (area && !area.querySelector('.gm-randbtn')){
-      var r=el('div','row gm-randbtn');
-      r.appendChild(btn('Pick a fallback action for '+kinName(),'secondary',function(){
-        r.remove();
-        var m=o.fallback();
-        logLine('sys','Fallback action for '+kinName()+': '+o.label(m)+'.',{cls:'warn'});
-        o.apply(m,'fallback');
-      }));
-      area.appendChild(r);
-    }
-  }});
-}
+function kinPokerMove(o){ o.what='action'; o.tag='ACTION'; return kinMove(o); }
 
 function pkCardEl(c, face){
   if (!face){
@@ -6334,32 +6347,7 @@ function stumpScoreLine(){
   var s=(store.get('games_stats',{})||{}).stump||{};
   return 'You stumped '+kinName()+': '+(s.win||0)+' \u00b7 '+kinName()+' guessed it: '+(s.loss||0);
 }
-function kinStumpMove(o){
-  ask(o.prompt, function(text){
-    var mv=o.parse(text);
-    if (mv!=null){ o.apply(mv,'kin'); return; }
-    logLine('sys','No question or guess found in that reply — asking once more.',{cls:'warn'});
-    ask('('+o.name+') I couldn\'t find a legal reply in that. Reply with exactly one of: '+o.legalText()+'. Put it on the first line.', function(t2){
-      var mv2=o.parse(t2);
-      if (mv2!=null){ o.apply(mv2,'kin'); return; }
-      var r=o.fallback();
-      logLine('sys','Still no legal reply — the app chose this for '+kinName()+': '+o.label(r)+'.',{cls:'warn'});
-      o.apply(r,'fallback');
-    });
-  }, { onFail: function(){
-    var area=$g('gmArea');
-    if (area && !area.querySelector('.gm-randbtn')){
-      var r=el('div','row gm-randbtn');
-      r.appendChild(btn('Pick a fallback for '+kinName(),'secondary',function(){
-        r.remove();
-        var m=o.fallback();
-        logLine('sys','Fallback for '+kinName()+': '+o.label(m)+'.',{cls:'warn'});
-        o.apply(m,'fallback');
-      }));
-      area.appendChild(r);
-    }
-  }});
-}
+function kinStumpMove(o){ o.what='question or guess'; o.noFormat=true; return kinMove(o); }
 
 var stump = {
   setup: function(area){
@@ -6520,7 +6508,7 @@ function init(){
   if(!$g('p-games')) return;
   paintStumpName();
   document.querySelectorAll('#gmPicker .gm-pick').forEach(function(b){ b.onclick=function(){ openGame(b.dataset.game); }; });
-  $g('gmChar').onchange=function(){ store.set('games_lastChar',$g('gmChar').value); paintCharHint(); };
+  $g('gmChar').onchange=function(){ G.pickChar=$g('gmChar').value; paintCharHint(); };
   $g('gmRetry').onclick=retryLast;
   $g('gmReplay').onclick=function(){ if(G.lastKinText) speak(G.lastKinText, true); else status('Nothing to replay yet.'); };
   $g('gmStopVoice').onclick=function(){ try{ stopSpeaking(); }catch(_){} status(''); };

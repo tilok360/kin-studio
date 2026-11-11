@@ -1,0 +1,24 @@
+{
+  "appId": "com.electron.kin-studio",
+  "productName": "Kin Studio",
+  "electronVersion": "33.4.11",
+  "directories": {
+    "output": "dist"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "include": "build/installer.nsh",
+    "artifactName": "Kin-Studio-Setup-${version}.${ext}"
+  }
+}
