@@ -145,6 +145,8 @@ function authPopupPlugin(): Plugin {
 }
 
 function apkDownloadPlugin(): Plugin {
+  // Local Vite dev only. Production Android/Windows buttons use
+  // https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk (and .exe).
   const mime = "application/vnd.android.package-archive";
   return {
     name: "apk-download",

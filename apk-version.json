@@ -1,0 +1,7 @@
+{
+  "app": "1.15.0",
+  "applicationId": "com.kinvoicehelper.app",
+  "versionName": "2.4",
+  "versionCode": 15,
+  "notes": "Apply these values in the Capacitor Android project at APK build time. This repo has no android/ Gradle tree. 1.14.1 shipped as versionName 2.3 / versionCode 14 with a new signing certificate, so the next APK must be versionCode 15 to install over it."
+}

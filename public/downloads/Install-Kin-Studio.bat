@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set "URL=https://kin-studio.grok.me"
+set "URL=https://kin-studio1.grok.me"
 echo Opening Kin Studio in Chrome as a Windows app...
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
   start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app="%URL%"

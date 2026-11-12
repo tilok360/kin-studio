@@ -4,11 +4,11 @@ Download the program. This page is not the app.
 
 **[Download Kin Studio](https://github.com/tilok360/kin-studio/releases/latest)** · [Windows installer](https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe) · [Android APK](https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk)
 
-- **Android:** [Kin Studio APK](https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk). Open the file to install. Allow installs from Chrome if it asks. Update over the old app — do not uninstall first.
+- **Android:** [Kin Studio APK](https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk). Open the file to install. Allow installs from Chrome if it asks. If you already installed 1.14.1 (new signing key), this version installs over it — do not uninstall first. If you are still on an APK from before 1.14.1, export your characters first, then uninstall and install.
 - **Windows:** `Kin-Studio-Desktop.zip`. Unzip it, run `Start Kin Studio.bat`, and leave that window open. Needs Google Chrome.
-- **iPhone:** open [kin-studio.grok.me](https://kin-studio.grok.me) in Safari, then Share → Add to Home Screen. Or install `Kin-Studio-iPhone.mobileconfig` from the same download page.
+- **iPhone:** open [kin-studio1.grok.me](https://kin-studio1.grok.me/) in Safari, then Share → Add to Home Screen. Or install `Kin-Studio-iPhone.mobileconfig` from the same download page. (The old kin-studio.grok.me address is retired.)
 
-The Android button inside the web app was pointing at `/get-apk`, which does not exist. Use the APK link above.
+The Android and Windows buttons inside the web app download from GitHub `releases/latest` (`Kin-Studio.apk` and `Kin-Studio.exe`). `/get-apk` is only a local Vite dev helper, not a production URL.
 
 Each person uses their own Kindroid `kn_` key. Do not share yours.
 

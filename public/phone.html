@@ -11,8 +11,520 @@
 <meta name="apple-mobile-web-app-title" content="Kin Studio">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/__grok/manifest.webmanifest">
-<title>Kin Studio</title>
+<title>Kin Studio 1.15.0</title>
+<meta name="kin-studio-version" content="1.15.0">
+<meta name="kin-studio-android" content="2.4 (15)">
 <script>window.KinKokoro={lastError:"",warmup:async()=>{},speak:async()=>{},interrupt(){}};</script>
+<script>window.KIN_STUDIO={app:"1.15.0",androidName:"2.4",androidCode:15,publicUrl:"https://kin-studio1.grok.me/",apkUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk",exeUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe"};</script>
+<script src="/kin-client.js"></script>
+<script>
+/* === KIN_CLIENT_INLINE_START === */
+/* Inline copy of public/kin-client.js so a Grok-builder phone.html replace stays self-contained. */
+/* Kin Studio chat client — 1.15.0 draft.
+   Official Kindroid send-message helper: streaming with fallback, 75s timeout,
+   rate-limit / auth / offline errors, a send queue, and secret redaction.
+   Never logs or returns the kn_ API key. */
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory();
+  else root.KinClient = factory();
+})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  "use strict";
+
+  var API = "https://api.kindroid.ai/v1";
+  var TIMEOUT_MS = 75000;
+  var RATE_MAX = 10;
+  var RATE_WINDOW_MS = 30000;
+  var HTTP_ERROR_MARK = "<<HTTP_ERROR>>";
+  var KEY_RE = /kn_[A-Za-z0-9_-]{8,}/gi;
+
+  function redact(s) {
+    s = String(s == null ? "" : s);
+    s = s.replace(KEY_RE, "kn_[redacted]");
+    s = s.replace(/Bearer\s+\S+/gi, "Bearer [redacted]");
+    s = s.replace(/Authorization\s*[:=]\s*[^\s&,;]+/gi, "Authorization: [redacted]");
+    return s;
+  }
+
+  function KindroidError(kind, message, extra) {
+    var e = new Error(redact(message));
+    e.name = "KindroidError";
+    e.kind = kind;
+    e.retry = !!(extra && extra.retry);
+    e.timeout = !!(extra && extra.timeout);
+    e.status = extra && extra.status;
+    e.cancelled = kind === "cancelled";
+    return e;
+  }
+
+  function classifyKindroidError(err, extras) {
+    extras = extras || {};
+    var status = extras.status != null ? extras.status : err && err.status;
+    var msg = redact((err && err.message) || err || "");
+    var name = err && err.name;
+    var offlineNav =
+      typeof navigator !== "undefined" && navigator && navigator.onLine === false;
+
+    if (extras.cancelled || (err && err.cancelled) || (err && err.kind === "cancelled")) {
+      return KindroidError("cancelled", "Cancelled.", { retry: true });
+    }
+    if (
+      extras.timeout ||
+      (err && err.timeout) ||
+      (err && err.kind === "timeout") ||
+      (name === "AbortError" && extras.reason === "timeout") ||
+      /did not answer within|took longer than 75/i.test(msg)
+    ) {
+      return KindroidError(
+        "timeout",
+        "Kindroid took longer than 75 seconds. Tap Send again, or Cancel.",
+        { retry: true, timeout: true }
+      );
+    }
+    if (status === 429 || /^429|\b429\b/.test(msg) || (err && err.kind === "rate_limit")) {
+      return KindroidError(
+        "rate_limit",
+        "Kindroid is rate limiting (10 messages every 30 seconds). Wait a moment, then try again.",
+        { retry: true, status: 429 }
+      );
+    }
+    if (status === 401 || (err && err.kind === "auth") || /\b401\b/.test(msg)) {
+      return KindroidError(
+        "auth",
+        "Kindroid rejected the API key (401). Paste a valid kn_ key in Settings. The key is never shown in errors.",
+        { retry: false, status: 401 }
+      );
+    }
+    if (status === 403 || (err && err.kind === "forbidden") || /\b403\b/.test(msg)) {
+      return KindroidError(
+        "forbidden",
+        "Kindroid rejected the request (403). The API key may be wrong, or the account needs an active trial or subscription. Check the key in Settings. The key is never shown in errors.",
+        { retry: false, status: 403 }
+      );
+    }
+    if (status === 404 || /\b404\b/.test(msg) || /not found/i.test(msg) && /\b400\b|\b404\b/.test(msg)) {
+      return KindroidError(
+        "not_found",
+        redact(msg) || "Kindroid does not recognize that Kin ID. Check the AI ID on the Characters tab.",
+        { retry: false, status: status || 404 }
+      );
+    }
+    if (
+      extras.offline ||
+      offlineNav ||
+      (err && err.kind === "offline") ||
+      /Failed to fetch|NetworkError|ERR_INTERNET|ENOTFOUND|ECONN|offline|CORS|Kindroid blocked|Load failed|network/i.test(msg) ||
+      (name === "TypeError" && /fetch|network/i.test(msg))
+    ) {
+      return KindroidError(
+        "offline",
+        "No connection to Kindroid. Check your network, then try again. If this is the website in a browser, use the Android app — some browsers block the Kindroid API.",
+        { retry: true }
+      );
+    }
+    if ((err && err.kind === "generation") || /^<\s*>/.test(msg) || /could not generate/i.test(msg)) {
+      return KindroidError(
+        "generation",
+        "Kindroid could not generate a reply this time. Wait a moment, then try again.",
+        { retry: true }
+      );
+    }
+    if (err && err.kind === "empty") {
+      return KindroidError("empty", "Kindroid sent back an empty reply. Try again.", { retry: true });
+    }
+    return KindroidError("error", msg || "Something went wrong. Try again.", { retry: true, status: status });
+  }
+
+  function StreamAssembler() {
+    this.buf = "";
+    this.started = false;
+  }
+  StreamAssembler.prototype.push = function (chunk) {
+    this.buf += String(chunk == null ? "" : chunk);
+    var vis = this.buf;
+    if (!this.started) {
+      vis = vis.replace(/^[\s\u0000]+/, "");
+      if (!vis) return { text: "", error: null, visible: false };
+      this.started = true;
+      this.buf = vis;
+    }
+    var idx = this.buf.indexOf(HTTP_ERROR_MARK);
+    if (idx >= 0) {
+      return {
+        text: this.buf.slice(0, idx),
+        error: this.buf.slice(idx + HTTP_ERROR_MARK.length).trim() || "Kindroid stream error",
+        visible: true
+      };
+    }
+    return { text: this.buf, error: null, visible: true };
+  };
+
+  function isResponseLike(res) {
+    return res && (typeof res.text === "function" || typeof res.status === "number" || res.body);
+  }
+
+  async function readFullText(res) {
+    if (!res) return "";
+    if (typeof res.text === "function") return await res.text();
+    if (res.data == null) return "";
+    if (typeof res.data === "string") return res.data;
+    try {
+      return JSON.stringify(res.data);
+    } catch (_) {
+      return String(res.data);
+    }
+  }
+
+  async function readStream(res, onChunk, signal) {
+    var asm = new StreamAssembler();
+    if (!res || !res.body || typeof res.body.getReader !== "function") {
+      var full = await readFullText(res);
+      var r = asm.push(full);
+      if (r.error) throw classifyKindroidError(new Error(r.error), { status: 200 });
+      if (onChunk && r.visible) onChunk("", r.text);
+      return r.text;
+    }
+    var reader = res.body.getReader();
+    var dec = typeof TextDecoder !== "undefined" ? new TextDecoder() : null;
+    try {
+      for (;;) {
+        if (signal && signal.aborted) {
+          var reason = signal.reason || (signal._kinReason);
+          var err = new Error("aborted");
+          err.name = "AbortError";
+          throw classifyKindroidError(err, {
+            timeout: reason === "timeout",
+            cancelled: reason === "cancel" || !reason || reason === "cancel"
+          });
+        }
+        var step = await reader.read();
+        if (step.done) break;
+        var chunk = step.value;
+        if (chunk && typeof chunk !== "string") {
+          chunk = dec ? dec.decode(chunk, { stream: true }) : String.fromCharCode.apply(null, chunk);
+        }
+        var st = asm.push(chunk);
+        if (st.visible && onChunk) onChunk(chunk, st.text);
+        if (st.error) {
+          throw classifyKindroidError(new Error(st.error), { status: 200 });
+        }
+      }
+      if (dec && dec.decode) asm.push(dec.decode());
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch (_) {}
+    }
+    return asm.started ? asm.buf : asm.push("\n").text || asm.buf;
+  }
+
+  function httpFail(status, body) {
+    var text = redact(String(body || "")).slice(0, 180);
+    var e = new Error(status + (text ? ": " + text : ""));
+    e.status = status;
+    e.http = true;
+    throw classifyKindroidError(e, { status: status });
+  }
+
+
+  async function sendMessage(opts) {
+    opts = opts || {};
+    var apiKey = opts.apiKey;
+    if (!apiKey || !/^kn_[A-Za-z0-9_-]{8,}$/.test(String(apiKey))) {
+      throw classifyKindroidError(new Error("Paste the kn_ key in Settings first."), { status: 401 });
+    }
+    if (!opts.ai_id) {
+      throw KindroidError("error", "Pick a character with a Kindroid AI ID.", { retry: false });
+    }
+    var timeoutMs = opts.timeoutMs == null ? TIMEOUT_MS : Number(opts.timeoutMs);
+    var fetchImpl = opts.fetchImpl || (typeof fetch === "function" ? fetch : null);
+    if (!fetchImpl) throw KindroidError("error", "No fetch available.", { retry: false });
+
+    var wantStream = opts.stream !== false;
+    var external = opts.signal;
+    var ctrl = opts.controller || (typeof AbortController !== "undefined" ? new AbortController() : null);
+    if (external && ctrl && typeof external.addEventListener === "function") {
+      if (external.aborted) ctrl.abort();
+      else external.addEventListener("abort", function () { try { ctrl.abort(); } catch (_) {} });
+    }
+    var signal = (ctrl && ctrl.signal) || external;
+    var timedOut = false;
+    var cancelled = false;
+    var timer = null;
+    var requestPosted = false;
+    var url = (opts.apiBase || API) + "/send-message";
+    var headers = {
+      Authorization: "Bearer " + apiKey,
+      Accept: "text/plain, application/json",
+      "Content-Type": "application/json"
+    };
+
+    function classifyCaught(e) {
+      if (e && e.name === "KindroidError") return e;
+      if (cancelled || (e && e.cancelled) || (e && e.name === "AbortError" && !timedOut)) {
+        return classifyKindroidError(e, { cancelled: true });
+      }
+      if (timedOut || (e && e.timeout) || (e && e.name === "AbortError")) {
+        return classifyKindroidError(e, { timeout: true, reason: "timeout" });
+      }
+      return classifyKindroidError(e, { status: e && e.status });
+    }
+
+    if (opts.onCancelHook && ctrl) {
+      opts.onCancelHook(function () {
+        cancelled = true;
+        if (signal) signal._kinReason = "cancel";
+        try { ctrl.abort(); } catch (_) {}
+      });
+    }
+
+    async function post(streamFlag) {
+      var res;
+      try {
+        res = await fetchImpl(url, {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify({
+            ai_id: opts.ai_id,
+            message: opts.message == null ? "" : String(opts.message),
+            stream: !!streamFlag
+          }),
+          signal: signal
+        });
+      } catch (e) {
+        throw classifyCaught(e);
+      }
+      if (!isResponseLike(res)) {
+        throw KindroidError("error", "Unexpected Kindroid response.", { retry: true });
+      }
+      var status = res.status || 0;
+      if (status && (status < 200 || status >= 300)) {
+        var body = "";
+        try { body = await readFullText(res); } catch (_) {}
+        httpFail(status, body);
+      }
+      return res;
+    }
+
+    async function work() {
+      if (wantStream) {
+        var started = false;
+        try {
+          var res = await post(true);
+          started = true;
+          requestPosted = true;
+          var hasReader = res.body && typeof res.body.getReader === "function";
+          var text;
+          if (hasReader) {
+            text = await readStream(res, opts.onChunk, signal);
+            return { text: text, streamed: true, fallback: false, posted: true };
+          }
+          text = await readFullText(res);
+          var asm = new StreamAssembler();
+          var st = asm.push(text);
+          if (st.error) throw classifyKindroidError(new Error(st.error), { status: 200 });
+          if (opts.onChunk && st.visible) opts.onChunk("", st.text);
+          return { text: st.text, streamed: false, fallback: true, posted: true };
+        } catch (e) {
+          // Only fall back to a second request if the stream never started.
+          // A second send-message after a 200 would post the user line twice.
+          var classified = classifyCaught(e);
+          var canFallback =
+            !started &&
+            classified.kind !== "cancelled" &&
+            classified.kind !== "timeout" &&
+            classified.kind !== "auth" &&
+            classified.kind !== "forbidden" &&
+            classified.kind !== "rate_limit" &&
+            classified.kind !== "not_found" &&
+            !classified.status;
+          if (!canFallback) {
+            classified.posted = requestPosted;
+            throw classified;
+          }
+        }
+      }
+      var res2 = await post(false);
+      requestPosted = true;
+      var text2 = await readFullText(res2);
+      var asm2 = new StreamAssembler();
+      var st2 = asm2.push(text2);
+      if (st2.error) throw classifyKindroidError(new Error(st2.error), { status: 200 });
+      if (opts.onChunk && st2.visible) opts.onChunk("", st2.text);
+      return { text: st2.text, streamed: false, fallback: wantStream, posted: true };
+    }
+
+    var timeoutPromise = null;
+    if (timeoutMs > 0) {
+      timeoutPromise = new Promise(function (_, rej) {
+        timer = setTimeout(function () {
+          timedOut = true;
+          if (signal) signal._kinReason = "timeout";
+          try { if (ctrl) ctrl.abort(); } catch (_) {}
+          if (typeof opts.onTimeout === "function") {
+            try { opts.onTimeout(); } catch (_) {}
+          }
+          rej(KindroidError(
+            "timeout",
+            "Kindroid took longer than 75 seconds. Tap Send again, or Cancel.",
+            { retry: true, timeout: true }
+          ));
+        }, timeoutMs);
+      });
+    }
+
+    try {
+      if (timeoutPromise) return await Promise.race([work(), timeoutPromise]);
+      return await work();
+    } catch (e) {
+      var c = classifyCaught(e);
+      c.posted = !!(requestPosted || (e && e.posted));
+      throw c;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  function RateGate(opts) {
+    opts = opts || {};
+    this.max = opts.max == null ? RATE_MAX - 1 : opts.max; // leave a slot; Kindroid is 10/30s
+    this.windowMs = opts.windowMs || RATE_WINDOW_MS;
+    this.sent = [];
+    this.now = opts.now || function () { return Date.now(); };
+  }
+  RateGate.prototype.wait = function () {
+    var self = this;
+    return new Promise(function (resolve) {
+      (function tick() {
+        var now = self.now();
+        self.sent = self.sent.filter(function (t) { return now - t < self.windowMs; });
+        if (self.sent.length < self.max) return resolve(0);
+        var wait = self.windowMs - (now - self.sent[0]) + 50;
+        setTimeout(tick, Math.min(Math.max(wait, 50), 1000));
+      })();
+    });
+  };
+  RateGate.prototype.mark = function () {
+    this.sent.push(this.now());
+  };
+
+  function ChatQueue(sendFn) {
+    this._send = sendFn;
+    this._q = [];
+    this._inflight = false;
+    this._current = null;
+    this.length = 0;
+  }
+  ChatQueue.prototype.busy = function () {
+    return this._inflight;
+  };
+  ChatQueue.prototype.has = function (text) {
+    text = String(text || "");
+    if (this._current && String(this._current.message || "") === text) return true;
+    return this._q.some(function (n) { return n.job && String(n.job.message || "") === text; });
+  };
+  ChatQueue.prototype.enqueue = function (job) {
+    job = job || {};
+    // Ignore a duplicate of the in-flight or last-queued message (double tap / double Enter).
+    var text = String(job.message || "");
+    if (this._inflight && this._current && this._current.message === text && !job.skip) {
+      return Promise.resolve({ ignored: true, reason: "duplicate" });
+    }
+    var last = this._q[this._q.length - 1];
+    if (last && last.message === text && !job.skip && !text) {
+      return Promise.resolve({ ignored: true, reason: "duplicate" });
+    }
+    if (last && last.message === text && !job.skip) {
+      return Promise.resolve({ ignored: true, reason: "duplicate" });
+    }
+    var self = this;
+    return new Promise(function (resolve, reject) {
+      self._q.push({ job: job, resolve: resolve, reject: reject });
+      self.length = self._q.length;
+      self._drain();
+    });
+  };
+  ChatQueue.prototype._drain = function () {
+    if (this._inflight) return;
+    var next = this._q.shift();
+    this.length = this._q.length;
+    if (!next) return;
+    this._inflight = true;
+    this._current = next.job;
+    var self = this;
+    Promise.resolve()
+      .then(function () { return self._send(next.job); })
+      .then(function (r) { next.resolve(r); })
+      .catch(function (e) { next.reject(e); })
+      .then(function () {
+        self._inflight = false;
+        self._current = null;
+        self._drain();
+      });
+  };
+  ChatQueue.prototype.cancelQueued = function () {
+    var dropped = this._q.splice(0);
+    this.length = 0;
+    dropped.forEach(function (n) {
+      var e = KindroidError("cancelled", "Cancelled.", { retry: true });
+      n.reject(e);
+    });
+    return dropped.length;
+  };
+
+  var SECRET_KEYS = {
+    api_key: 1,
+    apiKey: 1,
+    kin_api_key: 1,
+    authorization: 1,
+    Authorization: 1,
+    password: 1,
+    keystore: 1,
+    token: 1,
+    discord_token: 1
+  };
+  function stripSecretsFromExport(value, seen) {
+    seen = seen || [];
+    if (value == null) return value;
+    if (typeof value === "string") return value.replace(KEY_RE, "kn_[redacted]");
+    if (typeof value !== "object") return value;
+    if (seen.indexOf(value) >= 0) return null;
+    seen.push(value);
+    if (Array.isArray(value)) {
+      return value.map(function (v) { return stripSecretsFromExport(v, seen); });
+    }
+    var out = {};
+    Object.keys(value).forEach(function (k) {
+      if (SECRET_KEYS[k] || /^api[_-]?key$/i.test(k) || /^kin_api/.test(k)) return;
+      out[k] = stripSecretsFromExport(value[k], seen);
+    });
+    return out;
+  }
+
+  function looksLikeGenerationFail(text) {
+    return /^<\s*>/.test(String(text || "").trim());
+  }
+
+  return {
+    API: API,
+    TIMEOUT_MS: TIMEOUT_MS,
+    RATE_MAX: RATE_MAX,
+    RATE_WINDOW_MS: RATE_WINDOW_MS,
+    HTTP_ERROR_MARK: HTTP_ERROR_MARK,
+    redact: redact,
+    classifyKindroidError: classifyKindroidError,
+    KindroidError: KindroidError,
+    StreamAssembler: StreamAssembler,
+    sendMessage: sendMessage,
+    RateGate: RateGate,
+    ChatQueue: ChatQueue,
+    stripSecretsFromExport: stripSecretsFromExport,
+    looksLikeGenerationFail: looksLikeGenerationFail
+  };
+});
+
+if(typeof window!=="undefined" && !window.KinClient && typeof module!=="undefined" && module.exports){ window.KinClient=module.exports; }
+/* === KIN_CLIENT_INLINE_END === */
+</script>
 <script>try{if(window.KinDesktop&&window.KinDesktop.platform==="windows")document.documentElement.classList.add("windows-app");}catch(e){}</script>
 <script>
 /* Voice-file fallback (Nov 2026): if this host is missing a Kokoro voice file, load the identical file from Hugging Face, then from the Kin Studio GitHub repo. */
@@ -226,6 +738,15 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
 #liveToast{pointer-events:none}
 /* hidden install buttons really hide (the .apk-dl display rule beat the hidden attribute). */
 .apk-dl[hidden]{display:none!important}
+#exportRemind{border-color:var(--accent);background:#141a18}
+#exportRemind[hidden]{display:none!important}
+#btnChatCancel[hidden],#btnChatSendAgain[hidden]{display:none!important}
+.bubble.streaming::after{content:"▍";margin-left:1px;animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+.ver-foot{font-size:.72rem;color:var(--muted);margin:12px 0 0}
+#apiKeyWrap{position:relative}
+#btnShowKey{position:absolute;right:8px;top:50%;transform:translateY(-50%);min-height:36px;width:auto;padding:0 10px;flex:none;font-size:.75rem}
+
 </style>
 </head>
 <body>
@@ -248,6 +769,15 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
   </nav>
 </header>
 <main>
+<div id="exportRemind" class="card" hidden>
+  <p class="hint" style="margin:0 0 8px"><strong>Export reminder.</strong> Before you update or uninstall, save your characters, personas, and chat history. This does not include your API key.</p>
+  <div class="row">
+    <button type="button" class="btn" id="btnExportEverything">Export everything</button>
+    <button type="button" class="btn secondary" id="btnExportRemindDismiss">Not now</button>
+  </div>
+  <p class="status" id="exportRemindStatus" role="status"></p>
+</div>
+
 
 <section id="p-voices" class="panel">
   <div class="card">
@@ -477,6 +1007,8 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
       <div class="chat-tools">
         <button type="button" class="btn secondary" id="btnChatReplay">Replay</button>
         <button type="button" class="btn secondary" id="btnChatContinue" title="Skip your turn">Continue</button>
+        <button type="button" class="btn secondary" id="btnChatCancel" hidden>Cancel</button>
+        <button type="button" class="btn secondary" id="btnChatSendAgain" hidden>Send again</button>
         <button type="button" class="icon-btn" id="btnMic" title="Hold to talk" aria-label="Hold to talk">Mic</button>
         <button type="button" class="btn" id="btnChatSpeak">Send</button>
       </div>
@@ -528,7 +1060,10 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
     <h2 style="margin:0 0 6px;font-size:1.15rem">API key</h2>
     <p class="hint">Kindroid → Profile Settings → API & advanced integrations. Paste the kn_ key, then Save. It stays on this device.</p>
     <label>Kindroid API key</label>
-    <input id="apiKey" type="text" placeholder="kn_…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done" inputmode="text">
+    <div id="apiKeyWrap">
+    <input id="apiKey" type="password" placeholder="kn_…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done" inputmode="text" aria-label="Kindroid API key">
+    <button type="button" class="btn secondary" id="btnShowKey" aria-pressed="false">Show</button>
+    </div>
     <p class="hint" id="keyState">API: not set — paste, then tap Save API key</p>
     <div class="row">
       <button type="button" class="btn" id="btnSaveSet">Save API key</button>
@@ -536,9 +1071,9 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
     <p class="status" id="setStatus" role="status" aria-live="polite"></p>
     <p class="hint" id="diskWhere" hidden></p>
     <div class="section">Send to others</div>
-    <p class="hint">iPhone friends get a link, not an APK. Paste the public Kin Studio page if you send from the Android app. Auto-filled when you open the web app.</p>
+    <p class="hint">iPhone friends get a link, not an APK. Defaults to <code>https://kin-studio1.grok.me/</code>. Auto-filled when you open the web app.</p>
     <label>Public link for iPhone</label>
-    <input id="shareUrl" type="url" placeholder="https://…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <input id="shareUrl" type="url" placeholder="https://kin-studio1.grok.me/" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
     <div class="row">
       <button type="button" class="btn" id="btnShareIos">Send iPhone link</button>
     </div>
@@ -582,6 +1117,7 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
     </p>
     <div class="section">Kokoro</div>
     <p class="hint">Voices tab → pick a named English model → Test. First play loads the on-device model. Stop or Send cuts speech.</p>
+    <p class="ver-foot" id="verFoot">Kin Studio 1.15.0 · Android 2.4 (versionCode 15)</p>
   </div>
 </section>
 
@@ -612,8 +1148,8 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
     <h2 style="margin:0 0 8px;font-size:1.3rem">Kin Studio</h2>
     <p class="hint">First run: Settings → paste kn_ → Save. Characters → name + AI ID → Save. Chat → Send. Create the kin in Kindroid first — the public API cannot create or clone.</p>
     <p class="hint"><strong>Send to iPhone</strong> — tap iPhone → Send to someone. They open the link in Safari → Share → Add to Home Screen. Each person uses their own kn_ key. Do not send your key.</p>
-    <p class="hint"><strong>iPhone install</strong> — open the link in Safari (not Chrome). Share → Add to Home Screen. Same studio, full screen. Apple does not allow an unsigned iPhone app file like the Android APK.</p>
-    <p class="hint"><strong>Android</strong> — tap Android for the APK, Update (do not uninstall).</p>
+    <p class="hint"><strong>iPhone install</strong> — open <a href="https://kin-studio1.grok.me/">https://kin-studio1.grok.me/</a> in Safari (not Chrome). Share → Add to Home Screen. Same studio, full screen. Apple does not allow an unsigned iPhone app file like the Android APK. (The old kin-studio.grok.me address is retired.)</p>
+    <p class="hint"><strong>Android</strong> — tap Android to get the latest APK from GitHub (<code>releases/latest/download/Kin-Studio.apk</code>). If you already installed 1.14.1 (the new signing key), 1.15.0 installs over it — do not uninstall. If you are still on an APK from before 1.14.1, export your characters first, then uninstall and install. This build is versionCode 15 / versionName 2.4.</p>
     <p class="hint"><strong>Windows</strong> — tap Windows and open <strong>Kin-Studio.exe</strong>. It is its own window. Not a Chrome tab. Not Edge.</p>
     <p class="hint"><strong>Guide</strong> — this page<br>
     <p class="hint"><strong>Chat</strong> — 1:1 send, listen, rewind. History loads the old thread so Replay works on past lines. Import the Kindroid chat-exporter JSON if you already downloaded it.<br>
@@ -941,7 +1477,7 @@ function bindInstallButtons(){
     android.addEventListener('click', function(e){
       e.preventDefault(); e.stopPropagation();
       var iosSheet=$('iosSheet'); if(iosSheet) iosSheet.hidden=true;
-      startDownload('https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk');
+      startDownload((window.KIN_STUDIO&&KIN_STUDIO.apkUrl)||'https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk');
       try{ liveToast('Downloading the Android app…'); }catch(_){}
     });
   }
@@ -951,7 +1487,7 @@ function bindInstallButtons(){
       e.preventDefault(); e.stopPropagation();
       var iosSheet=$('iosSheet'); if(iosSheet) iosSheet.hidden=true;
       var sh=$('winSheet'); if(sh) sh.hidden=false;
-      startDownload('https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe');
+      startDownload((window.KIN_STUDIO&&KIN_STUDIO.exeUrl)||'https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe');
       try{ liveToast('Downloading Kin-Studio.exe…'); }catch(_){}
     });
   }
@@ -959,7 +1495,7 @@ function bindInstallButtons(){
     winFile.dataset.dl='1';
     winFile.addEventListener('click', function(e){
       e.preventDefault(); e.stopPropagation();
-      startDownload('https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe');
+      startDownload((window.KIN_STUDIO&&KIN_STUDIO.exeUrl)||'https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe');
       try{ liveToast('Downloading Kin-Studio.exe…'); }catch(_){}
     });
   }
@@ -1931,6 +2467,62 @@ function capHttp(){
   }catch(_){}
   return null;
 }
+function kinRedact(s){
+  if(window.KinClient && KinClient.redact) return KinClient.redact(s);
+  return String(s==null?'':s).replace(/kn_[A-Za-z0-9_-]{8,}/gi,'kn_[redacted]').replace(/Bearer\s+\S+/gi,'Bearer [redacted]');
+}
+function kinHttpError(status, text, path){
+  var safe = kinRedact(String(text||'')).slice(0,180);
+  var hist = /get-chat-messages/.test(String(path||''));
+  if(window.KinClient && KinClient.classifyKindroidError){
+    var e = KinClient.classifyKindroidError(new Error(status+': '+safe), { status:status });
+    if(status===429 && hist){
+      e.message = 'Kindroid daily history limit (600 pulls per 24 hours). Saved thread is kept.';
+    }
+    return e;
+  }
+  if(status===403) return new Error('Kindroid rejected the request (403). The API key may be wrong, or the account needs an active trial or subscription.');
+  if(status===401) return new Error('Kindroid rejected the API key (401). Paste a valid kn_ key in Settings.');
+  if(status===429) return new Error(hist
+    ? 'Kindroid daily history limit (600 pulls per 24 hours). Saved thread is kept.'
+    : 'Kindroid is rate limiting (10 messages every 30 seconds). Wait a moment, then try again.');
+  return new Error(status+': '+safe);
+}
+function kindroidFetch(url, init){
+  /* Prefer window.fetch for streaming. CapacitorHttp does not expose a byte stream, so
+     KinClient falls back to a non-stream request (never a second post after a 200). */
+  var native = (typeof capHttp==='function') ? capHttp() : null;
+  var wantStream = false;
+  try{ wantStream = !!(init && init.body && JSON.parse(init.body).stream); }catch(_){}
+  if(wantStream && typeof fetch==='function'){
+    return fetch(url, init);
+  }
+  if(native && native.request){
+    var method = (init && init.method) || 'GET';
+    var headers = (init && init.headers) || {};
+    var data;
+    try{ data = init && init.body ? JSON.parse(init.body) : undefined; }catch(_){ data = undefined; }
+    return native.request({
+      url:url, method:method, headers:headers, data:data,
+      connectTimeout:20000, readTimeout:90000
+    }).then(function(res){
+      var status = res.status||0;
+      var text = '';
+      if(res.data==null) text='';
+      else if(typeof res.data==='string') text=res.data;
+      else { try{ text=JSON.stringify(res.data); }catch(_){ text=String(res.data); } }
+      return {
+        status:status,
+        ok: status>=200 && status<300,
+        headers: { get:function(){ return 'text/plain'; } },
+        body:null,
+        text: async function(){ return text; },
+        data: res.data
+      };
+    });
+  }
+  return fetch(url, init);
+}
 async function kinRaw(method, path, body){
   const key=readApiKey();
   if(!keyLooksGood(key)) throw new Error('Set API key in Settings');
@@ -1946,9 +2538,7 @@ async function kinRaw(method, path, body){
     else if(typeof res.data==='string') text=res.data;
     else { try{ text=JSON.stringify(res.data); }catch(_){ text=String(res.data); } }
     if(status<200||status>=300){
-      if(status===403) throw new Error('403 — subscription or bad key');
-      if(status===429) throw new Error('429 — Kindroid daily history limit. Saved thread is kept.');
-      throw new Error(status+': '+text.slice(0,180));
+      throw kinHttpError(status, text, path);
     }
     return text;
   }
@@ -1960,9 +2550,7 @@ async function kinRaw(method, path, body){
   }
   const text=await r.text();
   if(!r.ok){
-    if(r.status===403) throw new Error('403 — subscription or bad key');
-    if(r.status===429) throw new Error('429 — Kindroid daily history limit. Saved thread is kept.');
-    throw new Error(r.status+': '+text.slice(0,180));
+    throw kinHttpError(r.status, text, path);
   }
   return text;
 }
@@ -2773,7 +3361,7 @@ function addLog(el, cls, text, kinName, speakRaw, extra){
     hear.textContent='Replay';
     hear.setAttribute('aria-label','Replay this reply');
     hear.title='Play this reply';
-    hear.onclick=function(e){ e.preventDefault(); replayLine(raw, kinName, el.id==='gLog'?'gStatus':'chatStatus'); };
+    hear.onclick=function(e){ e.preventDefault(); var live=(typeof b!=='undefined' && b && b.textContent) || (typeof body!=='undefined' && body && body.textContent) || raw; replayLine(live, kinName, el.id==='gLog'?'gStatus':'chatStatus'); };
     return hear;
   }
   function attachImages(parent){
@@ -2798,7 +3386,7 @@ function addLog(el, cls, text, kinName, speakRaw, extra){
     if(cls==='kin' && raw.trim()) d.appendChild(hearBtn());
     el.appendChild(d);
     el.scrollTop=el.scrollHeight;
-    return;
+    return { el:el, bubble:body, row:d };
   }
   const empty=el.querySelector('.hint'); if(empty) empty.remove();
   const row=document.createElement('div');
@@ -2809,7 +3397,7 @@ function addLog(el, cls, text, kinName, speakRaw, extra){
   av.textContent = cls==='user' ? 'You' : initials(kinName||'Kin');
   const wrap=document.createElement('div');
   const b=document.createElement('div');
-  b.className='bubble';
+  b.className='bubble'+(extra.streaming?' streaming':'');
   b.textContent=text;
   attachImages(b);
   const meta=document.createElement('div');
@@ -2817,11 +3405,12 @@ function addLog(el, cls, text, kinName, speakRaw, extra){
   const time=document.createElement('span');
   time.textContent=fmtTime(extra.t);
   meta.appendChild(time);
-  if(cls==='kin' && raw.trim()) meta.appendChild(hearBtn());
+  if(cls==='kin' && raw.trim() && !extra.streaming) meta.appendChild(hearBtn());
   wrap.appendChild(b); wrap.appendChild(meta);
   row.appendChild(av); row.appendChild(wrap);
   el.appendChild(row);
   scrollChat();
+  return { el:el, bubble:b, row:row, meta:meta, hear: hearBtn };
 }
 function renderGroupHistory(list, opts){
   const el=$('gLog'); if(!el) return;
@@ -2876,28 +3465,109 @@ function syncChatHeader(){
   if($('chatAvatar')) setChatAvatar($('chatAvatar'), c, 'pick');
   if($('chatVoiceHint')) $('chatVoiceHint').textContent = c ? ((v&&v.name||'No voice')+(c.ai_id?' · ready':' · needs AI ID')) : 'Pick a character';
 }
-async function doChat(speak, skip){
-  try{ persistSettings(null,{listen:false}); }catch(_){}
-  if(!keyLooksGood(readApiKey())){ $('chatStatus').innerHTML='<span class="error">Paste the kn_ key in Settings first.</span>'; return; }
-  const c=chars().find(x=>x.id===$('chatChar').value);
-  if(!c||!c.ai_id){ $('chatStatus').innerHTML='<span class="error">Pick a character with a Kindroid AI ID (Characters tab).</span>'; return; }
-  const auto = autoVoiceOn();
-  if(speak==null) speak=auto;
-  const message=skip ? '' : $('chatMsg').value.trim();
-  if(!skip && !message) return;
-  stopSpeaking();
-  store.set('lastChatChar', c.id);
-  $('btnChatSpeak').disabled=true;
-  if($('btnChatContinue')) $('btnChatContinue').disabled=true;
-  if(!skip){
-    $('chatMsg').value='';
-    addLog($('chatLog'),'user', message, c.name);
-    persistChat(c.id,'user',message);
+var chatQueue=null, chatRate=null, chatCancelHook=null, chatLastFailed=null, chatInFlight=false;
+function getChatRate(){
+  if(chatRate) return chatRate;
+  if(window.KinClient && KinClient.RateGate) chatRate=new KinClient.RateGate();
+  return chatRate;
+}
+function getChatQueue(){
+  if(chatQueue) return chatQueue;
+  if(window.KinClient && KinClient.ChatQueue){
+    chatQueue=new KinClient.ChatQueue(function(job){ return runChatJob(job); });
   }
+  return chatQueue;
+}
+function chatBusy(on){
+  chatInFlight=!!on;
+  if($('btnChatSpeak')) $('btnChatSpeak').disabled=!!on;
+  if($('btnChatContinue')) $('btnChatContinue').disabled=!!on;
+  if($('btnChatCancel')) $('btnChatCancel').hidden=!on;
+  if($('btnMic')){ /* leave usable so a next line can be queued */ }
+}
+function chatStatusErr(e, posted){
+  var msg=kinRedact((e && e.message) || e || 'Something went wrong.');
+  var extra='';
+  if(posted){
+    extra=' Kindroid may already have this message. Sync the thread before sending it again, or you may post a duplicate.';
+  }
+  if($('chatStatus')) $('chatStatus').innerHTML='<span class="error">'+esc(msg)+esc(extra)+'</span>';
+}
+async function runChatJob(job){
+  var c=chars().find(function(x){ return x.id===job.charId; }) || job.char;
+  var message=job.message;
+  var skip=!!job.skip;
+  var speak=job.speak;
+  var reply='';
+  var logRet=null;
+  var streamEl=null;
+  chatCancelHook=null;
+  chatLastFailed=null;
+  if($('btnChatSendAgain')) $('btnChatSendAgain').hidden=true;
+  chatBusy(true);
   $('chatStatus').textContent=skip?'Continuing…':'Waiting…';
+  var posted=false;
   try{
-    const reply=await apiPost('/send-message',{ ai_id:c.ai_id, message: skip ? '...' : message, stream:false });
-    addLog($('chatLog'),'kin', reply, c.name);
+    var gate=getChatRate();
+    if(gate && gate.wait){
+      var n=gate.sent ? gate.sent.length : 0;
+      if(n>=(gate.max||9)){
+        $('chatStatus').textContent='Waiting for Kindroid’s 10-per-30-seconds limit…';
+      }
+      await gate.wait();
+      gate.mark();
+    }
+    if(!window.KinClient || !KinClient.sendMessage){
+      var replyOld=await apiPost('/send-message',{ ai_id:c.ai_id, message: skip ? '...' : message, stream:false });
+      posted=true;
+      reply=replyOld;
+    } else {
+      var result=await KinClient.sendMessage({
+        apiKey: readApiKey(),
+        ai_id: c.ai_id,
+        message: skip ? '...' : message,
+        stream: true,
+        timeoutMs: (window.KinClient && KinClient.TIMEOUT_MS) || 75000,
+        fetchImpl: kindroidFetch,
+        onCancelHook: function(fn){ chatCancelHook=fn; },
+        onChunk: function(chunk, assembled){
+          reply=assembled;
+          if(!streamEl){
+            logRet=addLog($('chatLog'),'kin', assembled, c.name, '', { streaming:true });
+            streamEl=logRet && logRet.bubble;
+          } else {
+            streamEl.textContent=assembled;
+            streamEl.classList.add('streaming');
+            if(typeof scrollChat==='function') scrollChat();
+          }
+          $('chatStatus').textContent='Receiving…';
+        }
+      });
+      posted=!!(result && result.posted);
+      reply=(result && result.text) || reply || '';
+    }
+    if(window.KinClient && KinClient.looksLikeGenerationFail && KinClient.looksLikeGenerationFail(reply)){
+      var ge=KinClient.classifyKindroidError(new Error('generation'), { });
+      ge.kind='generation';
+      ge.posted=posted;
+      throw ge;
+    }
+    if(!(reply||'').trim()){
+      var ee=window.KinClient
+        ? KinClient.KindroidError('empty','Kindroid sent back an empty reply. Try again.',{ retry:true })
+        : new Error('Kindroid sent back an empty reply. Try again.');
+      ee.posted=posted;
+      throw ee;
+    }
+    if(streamEl){
+      streamEl.classList.remove('streaming');
+      streamEl.textContent=reply;
+      if(logRet && logRet.meta && reply.trim() && !logRet.meta.querySelector('.bubble-hear') && logRet.hear){
+        logRet.meta.appendChild(logRet.hear());
+      }
+    } else {
+      addLog($('chatLog'),'kin', reply, c.name);
+    }
     persistChat(c.id,'kin',reply);
     store.set('lastTurn', { kind:'solo', id:c.id, ai_id:c.ai_id, count:skip?1:2, userText:skip?'':message });
     if(speak){
@@ -2910,22 +3580,89 @@ async function doChat(speak, skip){
       $('chatStatus').textContent=audiobookOn()?'Your turn — they’re done.':'';
       if($('chatPulse')) $('chatPulse').classList.remove('on');
     }
+    return { text:reply, posted:true };
   }catch(e){
-    const hist=store.get('chatHist_'+c.id, []);
-    if(!skip && hist.length && hist[hist.length-1].role==='user' && hist[hist.length-1].text===message){
-      store.set('chatHist_'+c.id, hist.slice(0,-1));
-      renderChatHistory(c);
+    if(streamEl){
+      streamEl.classList.remove('streaming');
+      if(!(streamEl.textContent||'').trim()){
+        try{
+          var row=streamEl.closest ? streamEl.closest('.bubble-row') : (streamEl.parentNode && streamEl.parentNode.parentNode);
+          if(row && row.parentNode) row.parentNode.removeChild(row);
+        }catch(_){}
+      }
     }
-    $('chatStatus').innerHTML='<span class="error">'+esc(e.message)+'</span>';
+    var already=!!(posted || (e && e.posted));
+    chatLastFailed={ message:message, skip:skip, speak:speak, charId:c && c.id, posted:already };
+    if($('btnChatSendAgain')) $('btnChatSendAgain').hidden=false;
+    if(e && (e.kind==='cancelled' || e.cancelled)){
+      $('chatStatus').innerHTML='<span class="error">Cancelled. Tap Send again to retry'+(already?' — Kindroid may already have this message.':'')+'.</span>';
+    } else {
+      chatStatusErr(e, already);
+    }
     if($('chatPulse')) $('chatPulse').classList.remove('on');
+    throw e;
   } finally {
-    $('btnChatSpeak').disabled=false;
-    if($('btnChatContinue')) $('btnChatContinue').disabled=false;
-    $('chatMsg').focus();
+    chatCancelHook=null;
+    chatBusy(false);
+    try{ $('chatMsg').focus(); }catch(_){}
+  }
+}
+async function doChat(speak, skip, opts){
+  opts=opts||{};
+  try{ persistSettings(null,{listen:false}); }catch(_){}
+  if(!keyLooksGood(readApiKey())){ $('chatStatus').innerHTML='<span class="error">Paste the kn_ key in Settings first.</span>'; return; }
+  const c=chars().find(x=>x.id===$('chatChar').value);
+  if(!c||!c.ai_id){ $('chatStatus').innerHTML='<span class="error">Pick a character with a Kindroid AI ID (Characters tab).</span>'; return; }
+  const auto = autoVoiceOn();
+  if(speak==null) speak=auto;
+  const message=skip ? '' : (opts.message!=null ? String(opts.message) : $('chatMsg').value.trim());
+  if(!skip && !message) return;
+  stopSpeaking();
+  store.set('lastChatChar', c.id);
+  var q=getChatQueue();
+  if(!skip && !opts.resend && q && q.has && q.has(message)){
+    $('chatStatus').textContent='Already sending that.';
+    return;
+  }
+  if(!skip && !opts.resend){
+    $('chatMsg').value='';
+    addLog($('chatLog'),'user', message, c.name);
+    persistChat(c.id,'user',message);
+  }
+  if(q && q.busy() && !skip){
+    $('chatStatus').textContent='Queued — sending after the current reply.';
+  } else {
+    $('chatStatus').textContent=skip?'Continuing…':'Waiting…';
+  }
+  var job={ message:message, skip:!!skip, speak:speak, charId:c.id, resend:!!opts.resend, char:c };
+  try{
+    if(!q){
+      await runChatJob(job);
+      return;
+    }
+    var accepted=await q.enqueue(job);
+    if(accepted && accepted.ignored){
+      $('chatStatus').textContent='Already sending that.';
+    }
+  }catch(e){
+    if(e && (e.kind==='cancelled' || e.cancelled)) return;
+    if($('chatStatus') && !/error/.test($('chatStatus').innerHTML||'')){
+      chatStatusErr(e, !!(e && e.posted));
+    }
   }
 }
 if($('btnChatSpeak')) $('btnChatSpeak').onclick=()=>doChat();
 if($('btnChatContinue')) $('btnChatContinue').onclick=()=>doChat(null, true);
+if($('btnChatCancel')) $('btnChatCancel').onclick=function(){
+  try{ if(typeof chatCancelHook==='function') chatCancelHook(); }catch(_){}
+  try{ if(chatQueue && chatQueue.cancelQueued) chatQueue.cancelQueued(); }catch(_){}
+};
+if($('btnChatSendAgain')) $('btnChatSendAgain').onclick=function(){
+  var last=chatLastFailed;
+  if(!last) return;
+  $('btnChatSendAgain').hidden=true;
+  void doChat(last.speak, last.skip, { message:last.message, resend:true });
+};
 function replayLine(text, who, statusId){
   const t=String(text||'').trim();
   if(!t) return;
@@ -3651,6 +4388,99 @@ if($('apiKey')){
   $('apiKey').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); persistSettings('API key saved.'); }});
 }
 
+
+var EXPORT_REMIND_KEY='ks_export_remind_1_15';
+function collectBackup(){
+  var histories={};
+  var archives={};
+  function take(k, v){
+    if(!k) return;
+    if(/api[_-]?key/i.test(k) || k==='kin_api_key' || k==='settings') return;
+    if(/^chatHist_/.test(k) || /^groupHist_/.test(k)) histories[k]=v;
+    else if(/^hist_/.test(k)) archives[k]=v;
+  }
+  try{
+    if(typeof diskCache==='object' && diskCache){
+      Object.keys(diskCache).forEach(function(k){
+        try{ take(k, JSON.parse(diskCache[k])); }catch(_){ take(k, diskCache[k]); }
+      });
+    } else if(typeof localStorage!=='undefined'){
+      for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i);
+        try{ take(k, JSON.parse(localStorage.getItem(k))); }catch(_){ take(k, localStorage.getItem(k)); }
+      }
+    }
+  }catch(_){}
+  chars().forEach(function(c){
+    var key='chatHist_'+c.id;
+    if(!histories[key]) histories[key]=store.get(key, []);
+  });
+  (savedGroups()||[]).forEach(function(g){
+    var id=g.group_id||g.id;
+    if(!id) return;
+    var key='chatHist_'+id;
+    if(!histories[key]) histories[key]=store.get(key, []);
+  });
+  var payload={
+    format:'kin-studio-backup-v1',
+    app:'Kin Studio 1.15.0',
+    exportedAt:new Date().toISOString(),
+    characters:chars(),
+    personas:personas(),
+    groups:savedGroups(),
+    voices:store.get('voices', []),
+    histories:histories,
+    archives:archives
+  };
+  if(window.KinClient && KinClient.stripSecretsFromExport){
+    payload=KinClient.stripSecretsFromExport(payload);
+  }
+  return payload;
+}
+async function exportEverything(statusId){
+  var status=$(statusId||'exportRemindStatus');
+  try{
+    var payload=collectBackup();
+    var how=await exportJsonFile('kin-studio-backup.json', payload);
+    var msg=how==='cancel'?'Export cancelled':(how==='native'||how==='share'?'Pick where to save kin-studio-backup.json.':'Backup is ready — it does not include your API key.');
+    if(status) status.textContent=msg;
+    if(how!=='cancel'){
+      try{ store.set(EXPORT_REMIND_KEY, true); }catch(_){}
+      if($('exportRemind')) $('exportRemind').hidden=true;
+    }
+    return how;
+  }catch(e){
+    if(status) status.innerHTML='<span class="error">'+esc(kinRedact(e && e.message || e))+'</span>';
+  }
+}
+function maybeShowExportRemind(){
+  var box=$('exportRemind');
+  if(!box) return;
+  try{
+    if(store.get(EXPORT_REMIND_KEY, false)){ box.hidden=true; return; }
+  }catch(_){}
+  var hasData=false;
+  try{ hasData=!!((chars()||[]).length || (personas()||[]).length || (savedGroups()||[]).length); }catch(_){}
+  box.hidden=!hasData;
+}
+function bindReliabilityUi(){
+  if($('btnExportEverything')) $('btnExportEverything').onclick=function(){ void exportEverything('exportRemindStatus'); };
+  if($('btnExportRemindDismiss')) $('btnExportRemindDismiss').onclick=function(){
+    try{ store.set(EXPORT_REMIND_KEY, true); }catch(_){}
+    if($('exportRemind')) $('exportRemind').hidden=true;
+  };
+  if($('btnShowKey')) $('btnShowKey').onclick=function(){
+    var inp=$('apiKey');
+    var btn=$('btnShowKey');
+    if(!inp) return;
+    var show=inp.type==='password';
+    inp.type=show?'text':'password';
+    btn.textContent=show?'Hide':'Show';
+    btn.setAttribute('aria-pressed', show?'true':'false');
+  };
+  maybeShowExportRemind();
+}
+
 function loadSettings(){
   const s=store.get('settings',{})||{};
   let key=normalizeKey(s.api_key||s.apiKey||'');
@@ -3675,6 +4505,7 @@ function loadSettings(){
         share=location.origin+'/';
       }
     }catch(_){}
+    if(!share && window.KIN_STUDIO && KIN_STUDIO.publicUrl) share=KIN_STUDIO.publicUrl;
     $('shareUrl').value=share;
   }
   paintHistQuota();
@@ -3835,6 +4666,7 @@ try{ wireLivePreview(); }catch(_){}
 try{ bindCharLimits(); }catch(_){}
 try{ bindPersonaUi(); }catch(_){}
 try{ loadSettings(); }catch(_){}
+try{ bindReliabilityUi(); }catch(_){}
 try{ setupListenLive(); }catch(_){}
 try{ renderChars(); refreshSelects(); }catch(_){}
 setInterval(function(){ try{ if($('p-character')&&$('p-character').classList.contains('active')) paintCharLimits(); }catch(_){} }, 400);
@@ -4135,6 +4967,7 @@ loadSysVoices().then(()=>{ renderVoices(); renderChars(); refreshSelects(); rend
     try{
       if(isPublicHost(location.hostname)) return location.origin+'/';
     }catch(_){}
+    if(window.KIN_STUDIO && KIN_STUDIO.publicUrl) return KIN_STUDIO.publicUrl;
     return '';
   }
   function iosPageUrl(){

@@ -1,0 +1,102 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SMOKE_PENDING</title>
+<body>
+<pre id="out">running…</pre>
+<iframe id="app" src="/phone.html" style="width:800px;height:600px"></iframe>
+<script src="/kin-client.js"></script>
+<script>
+(async function () {
+  const lines = [];
+  function ok(name, cond, detail) {
+    lines.push((cond ? "PASS" : "FAIL") + " " + name + (detail ? " — " + detail : ""));
+  }
+  const frame = document.getElementById("app");
+  const iframeReady = new Promise(function (resolve, reject) {
+    const t = setTimeout(function () { reject(new Error("iframe timeout")); }, 15000);
+    function done() {
+      if (frame.contentWindow && (frame.contentWindow.KIN_STUDIO || frame.contentDocument)) {
+        clearTimeout(t); resolve();
+      }
+    }
+    frame.addEventListener("load", done);
+    if (frame.contentDocument && frame.contentDocument.readyState === "complete") done();
+  });
+  try {
+    ok("KinClient loaded", !!(window.KinClient && KinClient.sendMessage));
+    const key = "kn_TESTKEY_DO_NOT_SHIP_abcdefghijklmnop";
+    let assembled = "";
+    const streamResult = await KinClient.sendMessage({
+      apiKey: key,
+      ai_id: "ai-1",
+      message: "hello",
+      timeoutMs: 5000,
+      fetchImpl: async function () {
+        const parts = [new TextEncoder().encode("Hel"), new TextEncoder().encode("lo from Kin")];
+        return {
+          status: 200,
+          body: {
+            getReader: function () {
+              return {
+                read: async function () {
+                  if (!parts.length) return { done: true };
+                  return { done: false, value: parts.shift() };
+                },
+                releaseLock: function () {}
+              };
+            }
+          },
+          text: async function () { return "Hello from Kin"; }
+        };
+      },
+      onChunk: function (c, a) { assembled = a; }
+    });
+    ok("stream assembled", (streamResult.text || "") === "Hello from Kin", streamResult.text);
+    ok("result has no key", JSON.stringify(streamResult).indexOf(key) < 0);
+    try {
+      await KinClient.sendMessage({
+        apiKey: key, ai_id: "ai-1", message: "x", timeoutMs: 80,
+        fetchImpl: function () { return new Promise(function () {}); }
+      });
+      ok("timeout threw", false);
+    } catch (e) {
+      ok("timeout kind", e && e.kind === "timeout", e && e.kind);
+      ok("timeout message has no key", String(e && e.message || "").indexOf(key) < 0);
+    }
+    try {
+      await KinClient.sendMessage({
+        apiKey: key, ai_id: "ai-1", message: "x", timeoutMs: 2000,
+        fetchImpl: async function () { return { status: 429, text: async function () { return "429 " + key; } }; }
+      });
+      ok("429 threw", false);
+    } catch (e) {
+      ok("429 kind", e && e.kind === "rate_limit", e && e.kind);
+      ok("429 has 10/30s text", /10/.test(e && e.message) && /30/.test(e && e.message));
+      ok("429 has no key", String(e && e.message || "").indexOf(key) < 0);
+    }
+
+    await iframeReady;
+    const win = frame.contentWindow;
+    const doc = frame.contentDocument;
+    ok("iframe 1.15.0", !!(win.KIN_STUDIO && win.KIN_STUDIO.app === "1.15.0"), win.KIN_STUDIO && win.KIN_STUDIO.app);
+    ok("iframe android 2.4 / 15", !!(win.KIN_STUDIO && win.KIN_STUDIO.androidName === "2.4" && win.KIN_STUDIO.androidCode === 15));
+    ok("iframe APK url", !!(win.KIN_STUDIO && /releases\/latest\/download\/Kin-Studio\.apk$/.test(win.KIN_STUDIO.apkUrl)));
+    ok("iframe publicUrl", !!(win.KIN_STUDIO && /kin-studio1\.grok\.me/.test(win.KIN_STUDIO.publicUrl)));
+    ok("iframe KinClient", !!(win.KinClient && win.KinClient.sendMessage));
+    ok("cancel button", !!doc.getElementById("btnChatCancel"));
+    ok("send again button", !!doc.getElementById("btnChatSendAgain"));
+    ok("export reminder", !!doc.getElementById("exportRemind"));
+    ok("api key is password", !!(doc.getElementById("apiKey") && doc.getElementById("apiKey").type === "password"));
+    ok("runChatJob present", typeof win.runChatJob === "function" || /runChatJob/.test(doc.documentElement.innerHTML));
+    ok("doChat present", typeof win.doChat === "function");
+  } catch (e) {
+    ok("runner", false, (e && e.stack) || e);
+  }
+  const text = lines.join("\n");
+  document.getElementById("out").textContent = text;
+  const failed = lines.some(function (l) { return l.indexOf("FAIL") === 0; });
+  document.title = failed ? "SMOKE_FAIL" : "SMOKE_PASS";
+  document.body.setAttribute("data-smoke", failed ? "FAIL" : "PASS");
+})();
+</script>
+</body>
