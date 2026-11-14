@@ -1,6 +1,9 @@
-/* Kin Studio chat client — 1.15.0 draft.
+/* Kin Studio chat client — 1.16.0.
    Official Kindroid send-message helper: streaming with fallback, 75s timeout,
    rate-limit / auth / offline errors, a send queue, and secret redaction.
+   1.16: one shared rate limiter for every Kindroid call (10 per 30 s, auto-wait
+   with a countdown), retry/backoff helpers, a connection-status feed, AI ID
+   clean-up and bulk-list parsing, live key test and Kin lookup for setup.
    Never logs or returns the kn_ API key. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -73,10 +76,31 @@
       );
     }
     if (status === 403 || (err && err.kind === "forbidden") || /\b403\b/.test(msg)) {
+      if (/subscri|read[- ]?only|preview|trial|plan|upgrade|restrict/i.test(msg) && !/bad key|invalid key|wrong key/i.test(msg)) {
+        return KindroidError(
+          "subscription",
+          "Kindroid says this account needs an active trial or subscription (403). The free preview may have ended, or group chats need a subscription. Your key is fine to keep.",
+          { retry: false, status: 403 }
+        );
+      }
       return KindroidError(
         "forbidden",
         "Kindroid rejected the request (403). The API key may be wrong, or the account needs an active trial or subscription. Check the key in Settings. The key is never shown in errors.",
         { retry: false, status: 403 }
+      );
+    }
+    if (status === 409 || /^409\b/.test(msg)) {
+      return KindroidError(
+        "conflict",
+        "Kindroid can't do that right now (409). Messages from a chat break, a voice call, or media still generating can't be rewound.",
+        { retry: false, status: 409 }
+      );
+    }
+    if (status >= 500 || /^5\d\d\b/.test(msg)) {
+      return KindroidError(
+        "server",
+        "Kindroid had a server problem (" + (status || "5xx") + "). Wait a few seconds, then try again.",
+        { retry: true, status: status || 500 }
       );
     }
     if (status === 404 || /\b404\b/.test(msg) || /not found/i.test(msg) && /\b400\b|\b404\b/.test(msg)) {
@@ -110,6 +134,10 @@
       return KindroidError("empty", "Kindroid sent back an empty reply. Try again.", { retry: true });
     }
     return KindroidError("error", msg || "Something went wrong. Try again.", { retry: true, status: status });
+  }
+
+  function looksLikeGenerationFail(text) {
+    return /^<\s*>/.test(String(text || "").trim());
   }
 
   function StreamAssembler() {
@@ -367,23 +395,252 @@
     this.max = opts.max == null ? RATE_MAX - 1 : opts.max; // leave a slot; Kindroid is 10/30s
     this.windowMs = opts.windowMs || RATE_WINDOW_MS;
     this.sent = [];
+    this.blockedUntil = 0;
     this.now = opts.now || function () { return Date.now(); };
+    this.scale = opts.scale || 1;
   }
-  RateGate.prototype.wait = function () {
+  RateGate.prototype._prune = function () {
+    var now = this.now(), w = this.windowMs;
+    this.sent = this.sent.filter(function (t) { return now - t < w; });
+    return now;
+  };
+  /* How long (ms) until a request may go out. 0 = now. */
+  RateGate.prototype.waitMs = function () {
+    var now = this._prune();
+    var block = Math.max(0, this.blockedUntil - now);
+    var slot = this.sent.length < this.max ? 0 : this.windowMs - (now - this.sent[0]) + 50;
+    return Math.max(block, slot, 0);
+  };
+  RateGate.prototype.snapshot = function () {
+    var ms = this.waitMs();
+    return { used: this.sent.length, max: this.max, waitMs: ms, blocked: this.blockedUntil > this.now() };
+  };
+  /* Resolve when a slot is free. onWait(secondsLeft) is called about twice a second while waiting. */
+  RateGate.prototype.wait = function (onWait, signal) {
     var self = this;
-    return new Promise(function (resolve) {
+    return new Promise(function (resolve, reject) {
       (function tick() {
-        var now = self.now();
-        self.sent = self.sent.filter(function (t) { return now - t < self.windowMs; });
-        if (self.sent.length < self.max) return resolve(0);
-        var wait = self.windowMs - (now - self.sent[0]) + 50;
-        setTimeout(tick, Math.min(Math.max(wait, 50), 1000));
+        if (signal && signal.aborted) return reject(KindroidError("cancelled", "Cancelled.", { retry: true }));
+        var ms = self.waitMs();
+        if (ms <= 0) {
+          if (onWait) { try { onWait(0); } catch (_) {} }
+          return resolve(0);
+        }
+        if (onWait) { try { onWait(Math.ceil(ms / 1000)); } catch (_) {} }
+        setTimeout(tick, Math.max(20, Math.min(ms * self.scale, 500)));
       })();
     });
   };
   RateGate.prototype.mark = function () {
+    this._prune();
     this.sent.push(this.now());
   };
+  /* Wait for a slot and take it in one step (what every Kindroid call should do). */
+  RateGate.prototype.acquire = function (onWait, signal) {
+    // Check and take the slot in the same tick, so callers that arrive together can't all slip through.
+    var self = this;
+    return new Promise(function (resolve, reject) {
+      (function tick() {
+        if (signal && signal.aborted) return reject(KindroidError("cancelled", "Cancelled.", { retry: true }));
+        var ms = self.waitMs();
+        if (ms <= 0) {
+          self.mark();
+          if (onWait) { try { onWait(0); } catch (_) {} }
+          return resolve(0);
+        }
+        if (onWait) { try { onWait(Math.ceil(ms / 1000)); } catch (_) {} }
+        setTimeout(tick, Math.max(20, Math.min(ms * self.scale, 500)));
+      })();
+    });
+  };
+  /* Kindroid said 429: hold everything for a full window. */
+  RateGate.prototype.penalize = function (ms) {
+    this.blockedUntil = Math.max(this.blockedUntil, this.now() + (ms == null ? this.windowMs : ms));
+  };
+
+  /* One limiter for the whole app: Chat, Games, Groups, Sync, Tools, setup. */
+  var limiter = new RateGate();
+
+  /* Connection status feed for the header pill. state: ok | waiting | busy | offline | auth | subscription | error | unknown */
+  var statusState = { state: "unknown", detail: "", at: 0 };
+  var statusListeners = [];
+  function setStatus(state, detail) {
+    statusState = { state: String(state || "unknown"), detail: redact(detail || ""), at: Date.now() };
+    statusListeners.slice().forEach(function (fn) { try { fn(statusState); } catch (_) {} });
+    return statusState;
+  }
+  function onStatus(fn) {
+    if (typeof fn === "function") statusListeners.push(fn);
+    return function () { statusListeners = statusListeners.filter(function (x) { return x !== fn; }); };
+  }
+  function getStatus() { return statusState; }
+  function statusFromError(e) {
+    var k = e && e.kind;
+    if (k === "offline") return setStatus("offline", e.message);
+    if (k === "auth" || k === "forbidden") return setStatus("auth", e.message);
+    if (k === "subscription") return setStatus("subscription", e.message);
+    if (k === "rate_limit") return setStatus("waiting", e.message);
+    if (k === "cancelled") return statusState;
+    // A reply-level problem (not found, "< >", timeout) still means the line to Kindroid works.
+    if (k === "not_found" || k === "generation" || k === "empty" || k === "conflict" || k === "timeout") return setStatus("ok", "");
+    return setStatus("error", (e && e.message) || "");
+  }
+
+  /* Backoff for network errors / 5xx: 1.5 s, 4 s, 9 s (+ jitter). */
+  function backoffMs(attempt) {
+    var base = [1500, 4000, 9000][Math.min(Math.max(attempt, 0), 2)];
+    return base + Math.floor(Math.random() * 400);
+  }
+  function isRetryable(e) {
+    var k = e && e.kind;
+    return k === "offline" || k === "server";
+  }
+
+  /* ---------- AI IDs ---------- */
+  var INVISIBLE_RE = /[\u0000-\u001F\u007F-\u009F\u00A0\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u2000-\u200F\u2028-\u202F\u205F-\u206F\u3000\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+  var AI_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
+  /* Clean a pasted AI ID / Kin ID / group link: strips invisible characters, quotes, labels and URLs. */
+  function cleanAiId(raw) {
+    var s = String(raw == null ? "" : raw).replace(INVISIBLE_RE, "").trim();
+    s = s.replace(/^["'`\u2018\u2019\u201C\u201D]+|["'`\u2018\u2019\u201C\u201D.,;]+$/g, "").trim();
+    var url = s.match(/\/(?:chat\/group|group|chat|kin|ai)\/([A-Za-z0-9_-]{6,64})/i);
+    if (url) return url[1];
+    s = s.replace(/^(?:kin\s*id|ai\s*id|ai_id|id|group\s*id|group_id)\s*[:=#-]?\s*/i, "");
+    s = s.replace(/\s+/g, "");
+    return s;
+  }
+  function aiIdProblem(id) {
+    id = String(id || "");
+    if (!id) return "empty";
+    if (/^kn_/i.test(id)) return "That is your API key, not a Kin ID. The Kin ID is at the bottom of the Kin's settings.";
+    if (/^[A-Za-z0-9]{5}$/.test(id)) return "That looks like a 5-character share code. Kindroid's API can't open a Kin from a share code — use the Kin ID from the bottom of the Kin's settings.";
+    if (!AI_ID_RE.test(id)) return "A Kin ID is 6–64 letters, numbers, - or _. Copy it again from the bottom of the Kin's settings in Kindroid.";
+    return "";
+  }
+  /* Parse a pasted list: one Kin per line. "Name: id", "Name = id", "Name, id", "Name | id", "Name<TAB>id", "id Name" or just "id". */
+  function parseKinList(text) {
+    var out = [], seen = {};
+    String(text || "").replace(INVISIBLE_RE, function (c) { return c === "\n" || c === "\r" ? c : ""; })
+      .split(/\r?\n|;/).forEach(function (line, i) {
+        var raw = line.trim();
+        if (!raw || /^#/.test(raw)) return;
+        var name = "", id = "";
+        var urlTok = raw.match(/https?:\/\/\S+/i);
+        if (urlTok) {
+          id = cleanAiId(urlTok[0].replace(/[?#].*$/, "").replace(/\/+$/, "").split("/").pop());
+          name = raw.replace(urlTok[0], "").replace(/[\s:=|,\t-]+$/, "").replace(/^[\s:=|,\t-]+/, "").trim();
+          var p0 = aiIdProblem(id);
+          out.push({ line: i + 1, name: name, ai_id: id, problem: p0, duplicate: !!seen[id] });
+          seen[id] = 1;
+          return;
+        }
+        var m = raw.match(/^(.*?)\s*(?::|=|\||\t|,|\s-\s|\s\u2013\s)\s*([^\s:=|,]+)\s*$/);
+        if (m && m[1] && !/^(kin\s*id|ai\s*id|ai_id|id)$/i.test(m[1].trim())) { name = m[1].trim(); id = cleanAiId(m[2]); }
+        else {
+          var parts = raw.split(/\s+/);
+          var idIdx = -1;
+          for (var j = 0; j < parts.length; j++) {
+            var cand = cleanAiId(parts[j]);
+            if (AI_ID_RE.test(cand) && /\d/.test(cand) && cand.length >= 12) { idIdx = j; id = cand; break; }
+          }
+          if (idIdx < 0) { id = cleanAiId(raw); }
+          else { name = parts.filter(function (_, k) { return k !== idIdx; }).join(" ").replace(/^(kin\s*id|ai\s*id)\s*:?/i, "").trim(); }
+        }
+        if (!id) return;
+        var problem = aiIdProblem(id);
+        var dup = !!seen[id];
+        seen[id] = 1;
+        out.push({ line: i + 1, name: name.replace(/^["']|["']$/g, ""), ai_id: id, problem: problem, duplicate: dup });
+      });
+    return out;
+  }
+
+  /* ---------- Setup helpers (used by the first-run wizard and Fix my connection) ---------- */
+  async function callRaw(opts, method, path, body) {
+    var fetchImpl = opts.fetchImpl || (typeof fetch === "function" ? fetch : null);
+    if (!fetchImpl) throw KindroidError("error", "No fetch available.", { retry: false });
+    var gate = opts.limiter || limiter;
+    await gate.acquire(opts.onWait);
+    var headers = { Authorization: "Bearer " + opts.apiKey, Accept: "text/plain, application/json" };
+    if (method === "POST") headers["Content-Type"] = "application/json";
+    var res;
+    try {
+      res = await fetchImpl((opts.apiBase || API) + path, { method: method, headers: headers, body: method === "POST" ? JSON.stringify(body || {}) : undefined });
+    } catch (e) {
+      throw classifyKindroidError(e, {});
+    }
+    var text = "";
+    try { text = await readFullText(res); } catch (_) {}
+    return { status: res.status || 0, text: text };
+  }
+
+  /* Live key test. Sends update-info for an AI ID that cannot exist, so nothing on the account changes.
+     Result: { ok, state: "ok" | "bad_key" | "subscription" | "offline" | "rate_limit" | "error", message } */
+  async function testKey(opts) {
+    opts = opts || {};
+    var key = String(opts.apiKey || "");
+    if (!/^kn_[A-Za-z0-9_-]{8,}$/.test(key)) {
+      return { ok: false, state: "bad_key", message: "That doesn't look like a Kindroid API key. It starts with kn_ — copy it again." };
+    }
+    var r;
+    try {
+      r = await callRaw(opts, "POST", "/update-info", { ai_id: "kinstudio-key-check-" + Date.now().toString(36) });
+    } catch (e) {
+      statusFromError(e);
+      return { ok: false, state: e.kind === "offline" ? "offline" : "error", message: e.message };
+    }
+    var st = r.status;
+    if (st === 401) { setStatus("auth", ""); return { ok: false, state: "bad_key", message: "Kindroid didn't accept this key (401). Copy it again, or tap Regenerate in Kindroid and paste the new one." }; }
+    if (st === 429) { limiter.penalize(); setStatus("waiting", ""); return { ok: false, state: "rate_limit", message: "Kindroid is rate limiting (10 requests every 30 seconds). Wait 30 seconds and test again." }; }
+    if (st === 403) {
+      setStatus("subscription", "");
+      return { ok: false, state: "subscription", message: "Kindroid refused this key (403). Either the key is wrong, or the account is read-only because the free preview ended (chat needs an active trial or subscription). Check Kindroid → Subscriptions, then test again." };
+    }
+    if (st >= 500) { setStatus("error", ""); return { ok: false, state: "error", message: "Kindroid had a server problem (" + st + "). Try again in a minute." }; }
+    // 200, 400, 404: the key got through authentication.
+    setStatus("ok", "");
+    return { ok: true, state: "ok", message: "Key works." };
+  }
+
+  /* Look up one Kin by AI ID through get-chat-messages (counts 1 of the 600 daily history pulls).
+     Oldest message first, so the first Kin line is usually the greeting and display_name is the Kin's name.
+     Result: { ok, state: "ok" | "not_found" | "bad_key" | "subscription" | "rate_limit" | "offline" | "error", name, greeting, count, message } */
+  async function inspectKin(opts) {
+    opts = opts || {};
+    var id = cleanAiId(opts.ai_id);
+    var problem = aiIdProblem(id);
+    if (problem) return { ok: false, state: "not_found", ai_id: id, message: problem === "empty" ? "No Kin ID." : problem };
+    var r;
+    try {
+      r = await callRaw(opts, "GET", "/get-chat-messages?ai_id=" + encodeURIComponent(id) + "&limit=10");
+    } catch (e) {
+      statusFromError(e);
+      return { ok: false, state: e.kind === "offline" ? "offline" : "error", ai_id: id, message: e.message };
+    }
+    if (typeof opts.onPull === "function") { try { opts.onPull(); } catch (_) {} }
+    var st = r.status;
+    if (st === 401) { setStatus("auth", ""); return { ok: false, state: "bad_key", ai_id: id, message: "Kindroid didn't accept the API key (401)." }; }
+    if (st === 403) { setStatus("subscription", ""); return { ok: false, state: "subscription", ai_id: id, message: "Kindroid refused (403). The key may be wrong, this Kin may belong to another account, or the free preview ended." }; }
+    if (st === 429) { limiter.penalize(); setStatus("waiting", ""); return { ok: false, state: "rate_limit", ai_id: id, message: "Rate limited. Wait 30 seconds, then check again." }; }
+    if (st === 400 || st === 404) { setStatus("ok", ""); return { ok: false, state: "not_found", ai_id: id, message: "Kindroid doesn't know this Kin ID. Copy it again from the bottom of the Kin's settings." }; }
+    if (st < 200 || st >= 300) { setStatus("error", ""); return { ok: false, state: "error", ai_id: id, message: "Kindroid error " + st + "." }; }
+    setStatus("ok", "");
+    var data = null;
+    try { data = JSON.parse(r.text); } catch (_) {}
+    var msgs = (data && (Array.isArray(data) ? data : data.messages)) || [];
+    var name = "", greeting = "";
+    for (var i = 0; i < msgs.length; i++) {
+      var m = msgs[i] || {};
+      var t = String(m.sender_type || m.sender || m.role || "").toLowerCase();
+      var isUser = t.indexOf("user") >= 0 || t === "human";
+      if (!isUser) {
+        if (!name && m.display_name) name = String(m.display_name).trim();
+        if (!greeting && m.message && !looksLikeGenerationFail(m.message)) greeting = String(m.message).trim();
+      }
+      if (name && greeting) break;
+    }
+    return { ok: true, state: "ok", ai_id: id, name: name, greeting: greeting, count: msgs.length, message: msgs.length ? "Found." : "Found (no messages yet)." };
+  }
 
   function ChatQueue(sendFn) {
     this._send = sendFn;
@@ -478,9 +735,6 @@
     return out;
   }
 
-  function looksLikeGenerationFail(text) {
-    return /^<\s*>/.test(String(text || "").trim());
-  }
 
   return {
     API: API,
@@ -494,6 +748,18 @@
     StreamAssembler: StreamAssembler,
     sendMessage: sendMessage,
     RateGate: RateGate,
+    limiter: limiter,
+    setStatus: setStatus,
+    onStatus: onStatus,
+    getStatus: getStatus,
+    statusFromError: statusFromError,
+    backoffMs: backoffMs,
+    isRetryable: isRetryable,
+    cleanAiId: cleanAiId,
+    aiIdProblem: aiIdProblem,
+    parseKinList: parseKinList,
+    testKey: testKey,
+    inspectKin: inspectKin,
     ChatQueue: ChatQueue,
     stripSecretsFromExport: stripSecretsFromExport,
     looksLikeGenerationFail: looksLikeGenerationFail

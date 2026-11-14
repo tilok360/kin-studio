@@ -11,18 +11,21 @@
 <meta name="apple-mobile-web-app-title" content="Kin Studio">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/__grok/manifest.webmanifest">
-<title>Kin Studio 1.15.0</title>
-<meta name="kin-studio-version" content="1.15.0">
-<meta name="kin-studio-android" content="2.4 (15)">
+<title>Kin Studio 1.16.0</title>
+<meta name="kin-studio-version" content="1.16.0">
+<meta name="kin-studio-android" content="2.5 (16)">
 <script>window.KinKokoro={lastError:"",warmup:async()=>{},speak:async()=>{},interrupt(){}};</script>
-<script>window.KIN_STUDIO={app:"1.15.0",androidName:"2.4",androidCode:15,publicUrl:"https://kin-studio1.grok.me/",apkUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk",exeUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe"};</script>
+<script>window.KIN_STUDIO={app:"1.16.0",androidName:"2.5",androidCode:16,publicUrl:"https://kin-studio1.grok.me/",apkUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk",exeUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe"};</script>
 <script src="/kin-client.js"></script>
 <script>
 /* === KIN_CLIENT_INLINE_START === */
 /* Inline copy of public/kin-client.js so a Grok-builder phone.html replace stays self-contained. */
-/* Kin Studio chat client — 1.15.0 draft.
+/* Kin Studio chat client — 1.16.0.
    Official Kindroid send-message helper: streaming with fallback, 75s timeout,
    rate-limit / auth / offline errors, a send queue, and secret redaction.
+   1.16: one shared rate limiter for every Kindroid call (10 per 30 s, auto-wait
+   with a countdown), retry/backoff helpers, a connection-status feed, AI ID
+   clean-up and bulk-list parsing, live key test and Kin lookup for setup.
    Never logs or returns the kn_ API key. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -95,10 +98,31 @@
       );
     }
     if (status === 403 || (err && err.kind === "forbidden") || /\b403\b/.test(msg)) {
+      if (/subscri|read[- ]?only|preview|trial|plan|upgrade|restrict/i.test(msg) && !/bad key|invalid key|wrong key/i.test(msg)) {
+        return KindroidError(
+          "subscription",
+          "Kindroid says this account needs an active trial or subscription (403). The free preview may have ended, or group chats need a subscription. Your key is fine to keep.",
+          { retry: false, status: 403 }
+        );
+      }
       return KindroidError(
         "forbidden",
         "Kindroid rejected the request (403). The API key may be wrong, or the account needs an active trial or subscription. Check the key in Settings. The key is never shown in errors.",
         { retry: false, status: 403 }
+      );
+    }
+    if (status === 409 || /^409\b/.test(msg)) {
+      return KindroidError(
+        "conflict",
+        "Kindroid can't do that right now (409). Messages from a chat break, a voice call, or media still generating can't be rewound.",
+        { retry: false, status: 409 }
+      );
+    }
+    if (status >= 500 || /^5\d\d\b/.test(msg)) {
+      return KindroidError(
+        "server",
+        "Kindroid had a server problem (" + (status || "5xx") + "). Wait a few seconds, then try again.",
+        { retry: true, status: status || 500 }
       );
     }
     if (status === 404 || /\b404\b/.test(msg) || /not found/i.test(msg) && /\b400\b|\b404\b/.test(msg)) {
@@ -132,6 +156,10 @@
       return KindroidError("empty", "Kindroid sent back an empty reply. Try again.", { retry: true });
     }
     return KindroidError("error", msg || "Something went wrong. Try again.", { retry: true, status: status });
+  }
+
+  function looksLikeGenerationFail(text) {
+    return /^<\s*>/.test(String(text || "").trim());
   }
 
   function StreamAssembler() {
@@ -389,23 +417,252 @@
     this.max = opts.max == null ? RATE_MAX - 1 : opts.max; // leave a slot; Kindroid is 10/30s
     this.windowMs = opts.windowMs || RATE_WINDOW_MS;
     this.sent = [];
+    this.blockedUntil = 0;
     this.now = opts.now || function () { return Date.now(); };
+    this.scale = opts.scale || 1;
   }
-  RateGate.prototype.wait = function () {
+  RateGate.prototype._prune = function () {
+    var now = this.now(), w = this.windowMs;
+    this.sent = this.sent.filter(function (t) { return now - t < w; });
+    return now;
+  };
+  /* How long (ms) until a request may go out. 0 = now. */
+  RateGate.prototype.waitMs = function () {
+    var now = this._prune();
+    var block = Math.max(0, this.blockedUntil - now);
+    var slot = this.sent.length < this.max ? 0 : this.windowMs - (now - this.sent[0]) + 50;
+    return Math.max(block, slot, 0);
+  };
+  RateGate.prototype.snapshot = function () {
+    var ms = this.waitMs();
+    return { used: this.sent.length, max: this.max, waitMs: ms, blocked: this.blockedUntil > this.now() };
+  };
+  /* Resolve when a slot is free. onWait(secondsLeft) is called about twice a second while waiting. */
+  RateGate.prototype.wait = function (onWait, signal) {
     var self = this;
-    return new Promise(function (resolve) {
+    return new Promise(function (resolve, reject) {
       (function tick() {
-        var now = self.now();
-        self.sent = self.sent.filter(function (t) { return now - t < self.windowMs; });
-        if (self.sent.length < self.max) return resolve(0);
-        var wait = self.windowMs - (now - self.sent[0]) + 50;
-        setTimeout(tick, Math.min(Math.max(wait, 50), 1000));
+        if (signal && signal.aborted) return reject(KindroidError("cancelled", "Cancelled.", { retry: true }));
+        var ms = self.waitMs();
+        if (ms <= 0) {
+          if (onWait) { try { onWait(0); } catch (_) {} }
+          return resolve(0);
+        }
+        if (onWait) { try { onWait(Math.ceil(ms / 1000)); } catch (_) {} }
+        setTimeout(tick, Math.max(20, Math.min(ms * self.scale, 500)));
       })();
     });
   };
   RateGate.prototype.mark = function () {
+    this._prune();
     this.sent.push(this.now());
   };
+  /* Wait for a slot and take it in one step (what every Kindroid call should do). */
+  RateGate.prototype.acquire = function (onWait, signal) {
+    // Check and take the slot in the same tick, so callers that arrive together can't all slip through.
+    var self = this;
+    return new Promise(function (resolve, reject) {
+      (function tick() {
+        if (signal && signal.aborted) return reject(KindroidError("cancelled", "Cancelled.", { retry: true }));
+        var ms = self.waitMs();
+        if (ms <= 0) {
+          self.mark();
+          if (onWait) { try { onWait(0); } catch (_) {} }
+          return resolve(0);
+        }
+        if (onWait) { try { onWait(Math.ceil(ms / 1000)); } catch (_) {} }
+        setTimeout(tick, Math.max(20, Math.min(ms * self.scale, 500)));
+      })();
+    });
+  };
+  /* Kindroid said 429: hold everything for a full window. */
+  RateGate.prototype.penalize = function (ms) {
+    this.blockedUntil = Math.max(this.blockedUntil, this.now() + (ms == null ? this.windowMs : ms));
+  };
+
+  /* One limiter for the whole app: Chat, Games, Groups, Sync, Tools, setup. */
+  var limiter = new RateGate();
+
+  /* Connection status feed for the header pill. state: ok | waiting | busy | offline | auth | subscription | error | unknown */
+  var statusState = { state: "unknown", detail: "", at: 0 };
+  var statusListeners = [];
+  function setStatus(state, detail) {
+    statusState = { state: String(state || "unknown"), detail: redact(detail || ""), at: Date.now() };
+    statusListeners.slice().forEach(function (fn) { try { fn(statusState); } catch (_) {} });
+    return statusState;
+  }
+  function onStatus(fn) {
+    if (typeof fn === "function") statusListeners.push(fn);
+    return function () { statusListeners = statusListeners.filter(function (x) { return x !== fn; }); };
+  }
+  function getStatus() { return statusState; }
+  function statusFromError(e) {
+    var k = e && e.kind;
+    if (k === "offline") return setStatus("offline", e.message);
+    if (k === "auth" || k === "forbidden") return setStatus("auth", e.message);
+    if (k === "subscription") return setStatus("subscription", e.message);
+    if (k === "rate_limit") return setStatus("waiting", e.message);
+    if (k === "cancelled") return statusState;
+    // A reply-level problem (not found, "< >", timeout) still means the line to Kindroid works.
+    if (k === "not_found" || k === "generation" || k === "empty" || k === "conflict" || k === "timeout") return setStatus("ok", "");
+    return setStatus("error", (e && e.message) || "");
+  }
+
+  /* Backoff for network errors / 5xx: 1.5 s, 4 s, 9 s (+ jitter). */
+  function backoffMs(attempt) {
+    var base = [1500, 4000, 9000][Math.min(Math.max(attempt, 0), 2)];
+    return base + Math.floor(Math.random() * 400);
+  }
+  function isRetryable(e) {
+    var k = e && e.kind;
+    return k === "offline" || k === "server";
+  }
+
+  /* ---------- AI IDs ---------- */
+  var INVISIBLE_RE = /[\u0000-\u001F\u007F-\u009F\u00A0\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u2000-\u200F\u2028-\u202F\u205F-\u206F\u3000\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+  var AI_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
+  /* Clean a pasted AI ID / Kin ID / group link: strips invisible characters, quotes, labels and URLs. */
+  function cleanAiId(raw) {
+    var s = String(raw == null ? "" : raw).replace(INVISIBLE_RE, "").trim();
+    s = s.replace(/^["'`\u2018\u2019\u201C\u201D]+|["'`\u2018\u2019\u201C\u201D.,;]+$/g, "").trim();
+    var url = s.match(/\/(?:chat\/group|group|chat|kin|ai)\/([A-Za-z0-9_-]{6,64})/i);
+    if (url) return url[1];
+    s = s.replace(/^(?:kin\s*id|ai\s*id|ai_id|id|group\s*id|group_id)\s*[:=#-]?\s*/i, "");
+    s = s.replace(/\s+/g, "");
+    return s;
+  }
+  function aiIdProblem(id) {
+    id = String(id || "");
+    if (!id) return "empty";
+    if (/^kn_/i.test(id)) return "That is your API key, not a Kin ID. The Kin ID is at the bottom of the Kin's settings.";
+    if (/^[A-Za-z0-9]{5}$/.test(id)) return "That looks like a 5-character share code. Kindroid's API can't open a Kin from a share code — use the Kin ID from the bottom of the Kin's settings.";
+    if (!AI_ID_RE.test(id)) return "A Kin ID is 6–64 letters, numbers, - or _. Copy it again from the bottom of the Kin's settings in Kindroid.";
+    return "";
+  }
+  /* Parse a pasted list: one Kin per line. "Name: id", "Name = id", "Name, id", "Name | id", "Name<TAB>id", "id Name" or just "id". */
+  function parseKinList(text) {
+    var out = [], seen = {};
+    String(text || "").replace(INVISIBLE_RE, function (c) { return c === "\n" || c === "\r" ? c : ""; })
+      .split(/\r?\n|;/).forEach(function (line, i) {
+        var raw = line.trim();
+        if (!raw || /^#/.test(raw)) return;
+        var name = "", id = "";
+        var urlTok = raw.match(/https?:\/\/\S+/i);
+        if (urlTok) {
+          id = cleanAiId(urlTok[0].replace(/[?#].*$/, "").replace(/\/+$/, "").split("/").pop());
+          name = raw.replace(urlTok[0], "").replace(/[\s:=|,\t-]+$/, "").replace(/^[\s:=|,\t-]+/, "").trim();
+          var p0 = aiIdProblem(id);
+          out.push({ line: i + 1, name: name, ai_id: id, problem: p0, duplicate: !!seen[id] });
+          seen[id] = 1;
+          return;
+        }
+        var m = raw.match(/^(.*?)\s*(?::|=|\||\t|,|\s-\s|\s\u2013\s)\s*([^\s:=|,]+)\s*$/);
+        if (m && m[1] && !/^(kin\s*id|ai\s*id|ai_id|id)$/i.test(m[1].trim())) { name = m[1].trim(); id = cleanAiId(m[2]); }
+        else {
+          var parts = raw.split(/\s+/);
+          var idIdx = -1;
+          for (var j = 0; j < parts.length; j++) {
+            var cand = cleanAiId(parts[j]);
+            if (AI_ID_RE.test(cand) && /\d/.test(cand) && cand.length >= 12) { idIdx = j; id = cand; break; }
+          }
+          if (idIdx < 0) { id = cleanAiId(raw); }
+          else { name = parts.filter(function (_, k) { return k !== idIdx; }).join(" ").replace(/^(kin\s*id|ai\s*id)\s*:?/i, "").trim(); }
+        }
+        if (!id) return;
+        var problem = aiIdProblem(id);
+        var dup = !!seen[id];
+        seen[id] = 1;
+        out.push({ line: i + 1, name: name.replace(/^["']|["']$/g, ""), ai_id: id, problem: problem, duplicate: dup });
+      });
+    return out;
+  }
+
+  /* ---------- Setup helpers (used by the first-run wizard and Fix my connection) ---------- */
+  async function callRaw(opts, method, path, body) {
+    var fetchImpl = opts.fetchImpl || (typeof fetch === "function" ? fetch : null);
+    if (!fetchImpl) throw KindroidError("error", "No fetch available.", { retry: false });
+    var gate = opts.limiter || limiter;
+    await gate.acquire(opts.onWait);
+    var headers = { Authorization: "Bearer " + opts.apiKey, Accept: "text/plain, application/json" };
+    if (method === "POST") headers["Content-Type"] = "application/json";
+    var res;
+    try {
+      res = await fetchImpl((opts.apiBase || API) + path, { method: method, headers: headers, body: method === "POST" ? JSON.stringify(body || {}) : undefined });
+    } catch (e) {
+      throw classifyKindroidError(e, {});
+    }
+    var text = "";
+    try { text = await readFullText(res); } catch (_) {}
+    return { status: res.status || 0, text: text };
+  }
+
+  /* Live key test. Sends update-info for an AI ID that cannot exist, so nothing on the account changes.
+     Result: { ok, state: "ok" | "bad_key" | "subscription" | "offline" | "rate_limit" | "error", message } */
+  async function testKey(opts) {
+    opts = opts || {};
+    var key = String(opts.apiKey || "");
+    if (!/^kn_[A-Za-z0-9_-]{8,}$/.test(key)) {
+      return { ok: false, state: "bad_key", message: "That doesn't look like a Kindroid API key. It starts with kn_ — copy it again." };
+    }
+    var r;
+    try {
+      r = await callRaw(opts, "POST", "/update-info", { ai_id: "kinstudio-key-check-" + Date.now().toString(36) });
+    } catch (e) {
+      statusFromError(e);
+      return { ok: false, state: e.kind === "offline" ? "offline" : "error", message: e.message };
+    }
+    var st = r.status;
+    if (st === 401) { setStatus("auth", ""); return { ok: false, state: "bad_key", message: "Kindroid didn't accept this key (401). Copy it again, or tap Regenerate in Kindroid and paste the new one." }; }
+    if (st === 429) { limiter.penalize(); setStatus("waiting", ""); return { ok: false, state: "rate_limit", message: "Kindroid is rate limiting (10 requests every 30 seconds). Wait 30 seconds and test again." }; }
+    if (st === 403) {
+      setStatus("subscription", "");
+      return { ok: false, state: "subscription", message: "Kindroid refused this key (403). Either the key is wrong, or the account is read-only because the free preview ended (chat needs an active trial or subscription). Check Kindroid → Subscriptions, then test again." };
+    }
+    if (st >= 500) { setStatus("error", ""); return { ok: false, state: "error", message: "Kindroid had a server problem (" + st + "). Try again in a minute." }; }
+    // 200, 400, 404: the key got through authentication.
+    setStatus("ok", "");
+    return { ok: true, state: "ok", message: "Key works." };
+  }
+
+  /* Look up one Kin by AI ID through get-chat-messages (counts 1 of the 600 daily history pulls).
+     Oldest message first, so the first Kin line is usually the greeting and display_name is the Kin's name.
+     Result: { ok, state: "ok" | "not_found" | "bad_key" | "subscription" | "rate_limit" | "offline" | "error", name, greeting, count, message } */
+  async function inspectKin(opts) {
+    opts = opts || {};
+    var id = cleanAiId(opts.ai_id);
+    var problem = aiIdProblem(id);
+    if (problem) return { ok: false, state: "not_found", ai_id: id, message: problem === "empty" ? "No Kin ID." : problem };
+    var r;
+    try {
+      r = await callRaw(opts, "GET", "/get-chat-messages?ai_id=" + encodeURIComponent(id) + "&limit=10");
+    } catch (e) {
+      statusFromError(e);
+      return { ok: false, state: e.kind === "offline" ? "offline" : "error", ai_id: id, message: e.message };
+    }
+    if (typeof opts.onPull === "function") { try { opts.onPull(); } catch (_) {} }
+    var st = r.status;
+    if (st === 401) { setStatus("auth", ""); return { ok: false, state: "bad_key", ai_id: id, message: "Kindroid didn't accept the API key (401)." }; }
+    if (st === 403) { setStatus("subscription", ""); return { ok: false, state: "subscription", ai_id: id, message: "Kindroid refused (403). The key may be wrong, this Kin may belong to another account, or the free preview ended." }; }
+    if (st === 429) { limiter.penalize(); setStatus("waiting", ""); return { ok: false, state: "rate_limit", ai_id: id, message: "Rate limited. Wait 30 seconds, then check again." }; }
+    if (st === 400 || st === 404) { setStatus("ok", ""); return { ok: false, state: "not_found", ai_id: id, message: "Kindroid doesn't know this Kin ID. Copy it again from the bottom of the Kin's settings." }; }
+    if (st < 200 || st >= 300) { setStatus("error", ""); return { ok: false, state: "error", ai_id: id, message: "Kindroid error " + st + "." }; }
+    setStatus("ok", "");
+    var data = null;
+    try { data = JSON.parse(r.text); } catch (_) {}
+    var msgs = (data && (Array.isArray(data) ? data : data.messages)) || [];
+    var name = "", greeting = "";
+    for (var i = 0; i < msgs.length; i++) {
+      var m = msgs[i] || {};
+      var t = String(m.sender_type || m.sender || m.role || "").toLowerCase();
+      var isUser = t.indexOf("user") >= 0 || t === "human";
+      if (!isUser) {
+        if (!name && m.display_name) name = String(m.display_name).trim();
+        if (!greeting && m.message && !looksLikeGenerationFail(m.message)) greeting = String(m.message).trim();
+      }
+      if (name && greeting) break;
+    }
+    return { ok: true, state: "ok", ai_id: id, name: name, greeting: greeting, count: msgs.length, message: msgs.length ? "Found." : "Found (no messages yet)." };
+  }
 
   function ChatQueue(sendFn) {
     this._send = sendFn;
@@ -500,9 +757,6 @@
     return out;
   }
 
-  function looksLikeGenerationFail(text) {
-    return /^<\s*>/.test(String(text || "").trim());
-  }
 
   return {
     API: API,
@@ -516,6 +770,18 @@
     StreamAssembler: StreamAssembler,
     sendMessage: sendMessage,
     RateGate: RateGate,
+    limiter: limiter,
+    setStatus: setStatus,
+    onStatus: onStatus,
+    getStatus: getStatus,
+    statusFromError: statusFromError,
+    backoffMs: backoffMs,
+    isRetryable: isRetryable,
+    cleanAiId: cleanAiId,
+    aiIdProblem: aiIdProblem,
+    parseKinList: parseKinList,
+    testKey: testKey,
+    inspectKin: inspectKin,
     ChatQueue: ChatQueue,
     stripSecretsFromExport: stripSecretsFromExport,
     looksLikeGenerationFail: looksLikeGenerationFail
@@ -747,11 +1013,37 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
 #apiKeyWrap{position:relative}
 #btnShowKey{position:absolute;right:8px;top:50%;transform:translateY(-50%);min-height:36px;width:auto;padding:0 10px;flex:none;font-size:.75rem}
 
+
+/* 1.16: connection pill, setup wizard, Fix my connection */
+.badge.conn{border:0;cursor:pointer;font:inherit;font-size:.72rem}
+.badge.conn.ok{color:#9fe3b8}.badge.conn.busy{color:#bcd7ff}.badge.conn.warn{color:#f3d28a}.badge.conn.bad{color:#ff9b9b}
+.wiz{position:fixed;inset:0;z-index:9999;background:rgba(6,8,11,.86);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:12px}
+.wiz[hidden]{display:none}
+html.wiz-open,html.wiz-open body{overflow:hidden}
+.wiz-card{position:relative;background:var(--card,#171a21);border-radius:14px;max-width:560px;width:100%;padding:18px 16px 22px;margin:auto 0;max-height:calc(100vh - 24px);overflow:auto}
+.wiz-card h2{margin:4px 0 8px;font-size:1.2rem}
+.wiz-steps{display:flex;gap:6px;flex-wrap:wrap;margin-right:40px}
+.wiz-steps span{font-size:.72rem;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted,#9aa3ad)}
+.wiz-steps span.on{background:var(--accent,#6b8f7e);color:#fff}.wiz-steps span.done{color:#9fe3b8}
+.wiz-how{margin:6px 0 10px 18px;padding:0;line-height:1.5}.wiz-how li{margin:3px 0}
+.wiz-close{position:absolute;top:10px;right:10px;width:40px;height:40px;border-radius:10px;border:0;background:rgba(255,255,255,.07);color:inherit;font-size:1rem}
+.wiz-row{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:10px;background:rgba(255,255,255,.04);margin:6px 0;border-left:3px solid transparent}
+.wiz-row.ok{border-left-color:#5fbf86}.wiz-row.bad{border-left-color:#e06c6c}.wiz-row.unchecked,.wiz-row.dup{border-left-color:#d9b25c}
+.wiz-main{flex:1 1 auto;min-width:0}.wiz-main .hint{word-break:break-all}
+.wiz-add{display:flex;align-items:center;gap:4px;white-space:nowrap;margin:6px 0 0;font-size:.8rem}
+.wiz-add input{width:auto;margin:0}
+.wiz-name{margin:0 0 4px}
+.linklike{background:none;border:0;color:var(--muted,#9aa3ad);text-decoration:underline;padding:10px 0;font:inherit;min-height:var(--tap,48px)}
+.ok-text{color:#9fe3b8}
+.fix-row{display:flex;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);margin:6px 0}
+.fix-row .fix-ic{font-weight:700;width:1.2em}.fix-row.ok .fix-ic{color:#9fe3b8}.fix-row.bad .fix-ic{color:#ff9b9b}.fix-row.warn .fix-ic{color:#f3d28a}
+.empty-card{border:1px dashed rgba(255,255,255,.18);border-radius:12px;padding:14px;margin:8px 0;text-align:center}
+.empty-card[hidden]{display:none}
 </style>
 </head>
 <body>
 <header>
-  <div class="top"><h1>Kin Studio</h1><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="apk-dl secondary" id="btnAndroidDl">Android</button><button type="button" class="apk-dl secondary" id="btnWinInstall">Windows</button><button type="button" class="apk-dl" id="btnIosInstall">iPhone</button><span class="badge" id="keyHint">API: not set</span></div></div>
+  <div class="top"><h1>Kin Studio</h1><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="apk-dl secondary" id="btnAndroidDl">Android</button><button type="button" class="apk-dl secondary" id="btnWinInstall">Windows</button><button type="button" class="apk-dl" id="btnIosInstall">iPhone</button><span class="badge" id="keyHint">API: not set</span><button type="button" class="badge conn" id="connPill" aria-live="polite" title="Tap for Fix my connection">● Kindroid: not checked</button></div></div>
   <nav aria-label="Studio sections">
     <button type="button" class="tab active" data-p="guide">Guide</button>
     <button type="button" class="tab" data-p="chat">Chat</button>
@@ -769,6 +1061,57 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
   </nav>
 </header>
 <main>
+<div id="setupWiz" class="wiz" hidden role="dialog" aria-modal="true" aria-labelledby="wizTitle">
+ <div class="wiz-card">
+  <div class="wiz-steps" id="wizDots"><span class="on">1 · Key</span><span>2 · Kins</span><span>3 · Voices</span><span>4 · Done</span></div>
+  <button type="button" class="wiz-close" id="wizClose" aria-label="Close setup">✕</button>
+  <section data-step="1">
+   <h2 id="wizTitle">Connect Kin Studio to Kindroid</h2>
+   <p class="hint">Kin Studio talks to your Kins with your Kindroid API key. It stays on this phone, is never shown again after you save it, and is never put in exports.</p>
+   <ol class="wiz-how">
+    <li>Open the Kindroid app and tap your <strong>Profile</strong>.</li>
+    <li>Go to <strong>Preferences → API &amp; Integrations</strong> and tap <strong>Open</strong>.</li>
+    <li>Tap <strong>Tap here to reveal API key</strong>, then copy it. It starts with <code>kn_</code>.</li>
+    <li>Come back here, tap <strong>Paste</strong>, then <strong>Test key</strong>.</li>
+   </ol>
+   <p class="hint">Don't share this key with anyone. Anyone who has it can do anything to your Kindroid account.</p>
+   <p class="hint ok-text" id="wizKeySaved" hidden>A key is already saved on this phone. Paste a new one only if you want to replace it, or tap Test key to check the saved one.</p>
+   <label for="wizKey">Kindroid API key</label>
+   <input id="wizKey" type="password" placeholder="kn_…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done" aria-label="Kindroid API key">
+   <div class="row"><button type="button" class="btn secondary" id="wizPaste">Paste</button><button type="button" class="btn" id="wizTestKey">Test key</button></div>
+   <p class="status" id="wizKeyStatus" role="status" aria-live="polite"></p>
+   <div class="row"><button type="button" class="btn ok" id="wizKeyNext" disabled>Next: add your Kins</button></div>
+  </section>
+  <section data-step="2" hidden>
+   <h2>Add your Kins</h2>
+   <ol class="wiz-how">
+    <li>In Kindroid, open a Kin and go to its <strong>Kin settings</strong>.</li>
+    <li>Scroll to the very bottom and copy the <strong>Kin ID</strong>.</li>
+    <li>Paste it below. For several Kins, put one per line. You can put a name first, like <code>Abby: your-kin-id</code>.</li>
+   </ol>
+   <p class="hint">Hidden spaces and invisible characters from copying are removed for you. Share codes (5 letters) can't be used — Kindroid's API needs the Kin ID.</p>
+   <textarea id="wizIds" rows="5" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Abby: paste-kin-id-here&#10;Cara: paste-kin-id-here"></textarea>
+   <label class="hint" style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="wizLookup" checked style="width:auto;margin:3px 0 0"> Look each Kin up on Kindroid to confirm the ID and fill in its name and greeting. Uses 1 of the 600 daily history pulls per Kin.</label>
+   <div class="row"><button type="button" class="btn secondary" id="wizIdsPaste">Paste</button><button type="button" class="btn" id="wizCheckIds">Check Kins</button></div>
+   <p class="status" id="wizIdsStatus" role="status" aria-live="polite"></p>
+   <div id="wizIdList"></div>
+   <div class="row"><button type="button" class="btn secondary" id="wizBack2">Back</button><button type="button" class="btn ok" id="wizSaveKins" disabled>Save Kins</button></div>
+   <button type="button" class="linklike" id="wizSkip2">Skip — I'll add Kins later</button>
+  </section>
+  <section data-step="3" hidden>
+   <h2>Pick a voice</h2>
+   <p class="hint">Kin Studio can read replies out loud with Kokoro voices on this phone. Pick one for each Kin and tap Test. The first test loads the voice engine once, so it can take a little while.</p>
+   <div id="wizVoiceList"></div>
+   <p class="status" id="wizVoiceStatus" role="status" aria-live="polite"></p>
+   <div class="row"><button type="button" class="btn secondary" id="wizBack3">Back</button><button type="button" class="btn ok" id="wizSaveVoices">Save voices</button></div>
+  </section>
+  <section data-step="4" hidden>
+   <h2>You're set</h2>
+   <p id="wizDoneText"></p>
+   <div class="row"><button type="button" class="btn ok" id="wizOpenChat">Open Chat</button><button type="button" class="btn secondary" id="wizAddMore">Add more Kins</button></div>
+  </section>
+ </div>
+</div>
 <div id="exportRemind" class="card" hidden>
   <p class="hint" style="margin:0 0 8px"><strong>Export reminder.</strong> Before you update or uninstall, save your characters, personas, and chat history. This does not include your API key.</p>
   <div class="row">
@@ -883,6 +1226,7 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
   <div class="card">
     <p class="hint">Each field has Copy, in Kindroid paste order. Import or export JSON anytime.</p>
     <div class="row">
+      <button type="button" class="btn" id="btnBulkKins">Add Kins by ID</button>
       <button type="button" class="btn secondary" id="btnImportChar">Import JSON</button>
       <button type="button" class="btn secondary" id="btnExportChar">Export this</button>
       <button type="button" class="btn" id="btnExportAll">Export all</button>
@@ -1000,6 +1344,7 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
       <button type="button" class="btn secondary" id="btnChatBreak"><span class="ico">⏸</span>Break</button>
       <button type="button" class="btn danger" id="btnChatWipe"><span class="ico">⌫</span>Wipe</button>
     </div>
+    <div class="empty-card" id="chatEmpty" hidden><p class="hint" id="chatEmptyText" style="margin:0 0 8px"></p><button type="button" class="btn" id="btnEmptySetup">Set up Kin Studio</button></div>
     <div class="chat-log" id="chatLog"></div>
     <div class="chat-composer">
       <p class="typing" id="chatStatus" role="status" aria-live="polite"></p>
@@ -1058,7 +1403,7 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
 <section id="p-settings" class="panel">
   <div class="card">
     <h2 style="margin:0 0 6px;font-size:1.15rem">API key</h2>
-    <p class="hint">Kindroid → Profile Settings → API & advanced integrations. Paste the kn_ key, then Save. It stays on this device.</p>
+    <p class="hint">Kindroid → Profile → Preferences → API &amp; Integrations → Open → Tap here to reveal API key. Paste the kn_ key, then Save. It stays on this device. New here? <button type="button" class="linklike" id="btnOpenSetup" style="min-height:0;padding:0">Run setup</button></p>
     <label>Kindroid API key</label>
     <div id="apiKeyWrap">
     <input id="apiKey" type="password" placeholder="kn_…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done" inputmode="text" aria-label="Kindroid API key">
@@ -1117,7 +1462,7 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
     </p>
     <div class="section">Kokoro</div>
     <p class="hint">Voices tab → pick a named English model → Test. First play loads the on-device model. Stop or Send cuts speech.</p>
-    <p class="ver-foot" id="verFoot">Kin Studio 1.15.0 · Android 2.4 (versionCode 15)</p>
+    <p class="ver-foot" id="verFoot">Kin Studio 1.16.0 · Android 2.5 (versionCode 16)</p>
   </div>
 </section>
 
@@ -1146,10 +1491,12 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
 <section id="p-guide" class="panel active">
   <div class="card">
     <h2 style="margin:0 0 8px;font-size:1.3rem">Kin Studio</h2>
-    <p class="hint">First run: Settings → paste kn_ → Save. Characters → name + AI ID → Save. Chat → Send. Create the kin in Kindroid first — the public API cannot create or clone.</p>
+    <p class="hint">First run: tap <strong>Set up</strong>. It walks you through pasting your kn_ key, adding your Kins by their Kin ID (several at once is fine), and picking a voice. Create the kin in Kindroid first — the public API cannot create or clone.</p>
+    <div class="row"><button type="button" class="btn" id="btnGuideSetup">Set up</button></div>
+    <p class="hint">The <strong>● Kindroid</strong> badge at the top shows the connection. If it says waiting, Kindroid's limit of 10 requests every 30 seconds was reached and the app is counting down. Tap it for <strong>Fix my connection</strong>.</p>
     <p class="hint"><strong>Send to iPhone</strong> — tap iPhone → Send to someone. They open the link in Safari → Share → Add to Home Screen. Each person uses their own kn_ key. Do not send your key.</p>
     <p class="hint"><strong>iPhone install</strong> — open <a href="https://kin-studio1.grok.me/">https://kin-studio1.grok.me/</a> in Safari (not Chrome). Share → Add to Home Screen. Same studio, full screen. Apple does not allow an unsigned iPhone app file like the Android APK. (The old kin-studio.grok.me address is retired.)</p>
-    <p class="hint"><strong>Android</strong> — tap Android to get the latest APK from GitHub (<code>releases/latest/download/Kin-Studio.apk</code>). If you already installed 1.14.1 (the new signing key), 1.15.0 installs over it — do not uninstall. If you are still on an APK from before 1.14.1, export your characters first, then uninstall and install. This build is versionCode 15 / versionName 2.4.</p>
+    <p class="hint"><strong>Android</strong> — tap Android to get the latest APK from GitHub (<code>releases/latest/download/Kin-Studio.apk</code>). If you already installed 1.14.1 or 1.15.0 (the new signing key), 1.16.0 installs over it — do not uninstall. If you are still on an APK from before 1.14.1, export your characters first, then uninstall and install. This build is versionCode 16 / versionName 2.5.</p>
     <p class="hint"><strong>Windows</strong> — tap Windows and open <strong>Kin-Studio.exe</strong>. It is its own window. Not a Chrome tab. Not Edge.</p>
     <p class="hint"><strong>Guide</strong> — this page<br>
     <p class="hint"><strong>Chat</strong> — 1:1 send, listen, rewind. History loads the old thread so Replay works on past lines. Import the Kindroid chat-exporter JSON if you already downloaded it.<br>
@@ -1361,6 +1708,16 @@ html.windows-app .gm-picker .gm-pick{min-height:56px}
   <button type="button" class="btn secondary" id="btnToolPing">Send ping</button>
 </div>
 <p class="status" id="toolStatus" role="status" aria-live="polite"></p>
+</div>
+<div class="card" id="fixCard">
+<h2 style="margin:0 0 6px;font-size:1.15rem">Fix my connection</h2>
+<p class="hint">Checks the network, your saved key (never shown), Kindroid's rate limit, today's history pulls, and your Kin IDs, and tells you what to fix. The quick check sends 1 request and uses no history pulls.</p>
+<div class="row">
+  <button type="button" class="btn" id="btnFixRun">Run check</button>
+  <button type="button" class="btn secondary" id="btnFixKins">Also check every Kin</button>
+</div>
+<p class="status" id="fixStatus" role="status" aria-live="polite"></p>
+<div id="fixResults"></div>
 </div>
 </section>
 
@@ -2232,7 +2589,7 @@ function charFromForm(){
   return {
     id:$('cId').value||uid(),
     name:($('cName').value||'').trim()||'Character',
-    ai_id:($('cAiId').value||'').trim(),
+    ai_id:((window.KinClient&&KinClient.cleanAiId)?KinClient.cleanAiId($('cAiId').value||''):($('cAiId').value||'').trim()),
     voice_id:$('cVoice').value||'',
     tag:($('cTag').value||'').trim(),
     bio:($('cBio').value||'').trim(),
@@ -2296,7 +2653,7 @@ function mapRawToChar(raw, voiceId){
   return {
     id: raw.id||uid(),
     name: raw.name||'Character',
-    ai_id: String(raw.ai_id||raw.aiId||raw.kinId||'').trim(),
+    ai_id: (window.KinClient&&KinClient.cleanAiId) ? KinClient.cleanAiId(raw.ai_id||raw.aiId||raw.kinId||'') : String(raw.ai_id||raw.aiId||raw.kinId||'').trim(),
     voice_id: voiceId||raw.voice_id||'',
     tag: raw.tag||raw.tagline||'',
     bio: raw.bio||'',
@@ -2429,6 +2786,7 @@ function refreshSelects(){
   if($('chatChar')) $('chatChar').innerHTML=cs.length?cs.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join(''):'<option value="">— save a character —</option>';
   const last=store.get('lastChatChar','');
   if(last&&cs.find(c=>c.id===last)) $('chatChar').value=last;
+  try{ if(typeof kinPaintEmpty==='function') kinPaintEmpty(); }catch(_){}
   const withId=cs.filter(c=>c.ai_id);
   $('gManualKin').innerHTML=withId.length?withId.map(c=>`<option value="${c.ai_id}">${esc(c.name)}</option>`).join(''):'<option value="">— need AI IDs —</option>';
 }
@@ -2476,8 +2834,9 @@ function kinHttpError(status, text, path){
   var hist = /get-chat-messages/.test(String(path||''));
   if(window.KinClient && KinClient.classifyKindroidError){
     var e = KinClient.classifyKindroidError(new Error(status+': '+safe), { status:status });
-    if(status===429 && hist){
+    if(status===429 && hist && pullsToday()>=PULL_DAY_CAP-5){
       e.message = 'Kindroid daily history limit (600 pulls per 24 hours). Saved thread is kept.';
+      e.kind = 'daily_cap';
     }
     return e;
   }
@@ -2523,15 +2882,36 @@ function kindroidFetch(url, init){
   }
   return fetch(url, init);
 }
-async function kinRaw(method, path, body){
-  const key=readApiKey();
-  if(!keyLooksGood(key)) throw new Error('Set API key in Settings');
+/* 1.16: every Kindroid call goes through one shared limiter (10 per 30 s), shows a countdown
+   instead of failing, retries network / 5xx errors with backoff when that is safe, and
+   waits out a 429 once (a 429 means Kindroid did not process the request). */
+window.__kinWaitSec=0;
+function kinPaintWait(sec, extra){
+  window.__kinWaitSec=sec||0;
+  try{
+    if(window.KinClient && KinClient.getStatus){
+      var cur=KinClient.getStatus().state;
+      if(sec>0 && cur!=='waiting') KinClient.setStatus('waiting','Kindroid allows 10 requests every 30 seconds.');
+      else if(sec>0 && typeof kinPaintConn==='function') kinPaintConn();
+    }
+  }catch(_){}
+  if(typeof extra==='function'){ try{ extra(sec); }catch(_){} }
+}
+function kinIdempotent(method, path){
+  return method==='GET' || /^\/(update-info|groupchats-update|groupchats-get-turn)\b/.test(String(path||''));
+}
+async function kinRawOnce(method, path, body, key){
   const url=API+path;
   const headers={ Authorization:'Bearer '+key, Accept:'text/plain, application/json' };
   if(method==='POST') headers['Content-Type']='application/json';
   const native=capHttp();
   if(native && native.request){
-    const res=await native.request({ url:url, method:method, headers:headers, data: method==='POST'?(body||{}):undefined, connectTimeout:20000, readTimeout:90000 });
+    let res;
+    try{
+      res=await native.request({ url:url, method:method, headers:headers, data: method==='POST'?(body||{}):undefined, connectTimeout:20000, readTimeout:90000 });
+    }catch(e){
+      const ne=new Error('Network error: '+kinRedact((e&&e.message)||e)); ne.kind='offline'; ne.name='KindroidError'; throw ne;
+    }
     const status=res.status||0;
     let text='';
     if(res.data==null) text='';
@@ -2546,13 +2926,51 @@ async function kinRaw(method, path, body){
   try{
     r=await fetch(url,{ method:method, headers:headers, body: method==='POST'?JSON.stringify(body||{}):undefined });
   }catch(e){
-    throw new Error('Kindroid blocked (CORS/network). Uninstall and install this APK. '+(e&&e.message||e));
+    const ne=new Error('Kindroid blocked (CORS/network). '+kinRedact((e&&e.message)||e)); ne.kind='offline'; ne.name='KindroidError'; throw ne;
   }
   const text=await r.text();
   if(!r.ok){
     throw kinHttpError(r.status, text, path);
   }
   return text;
+}
+async function kinRaw(method, path, body, opts){
+  opts=opts||{};
+  const key=opts.apiKey||readApiKey();
+  if(!keyLooksGood(key)) throw new Error('Set API key in Settings');
+  const KC=window.KinClient||null;
+  const safe=kinIdempotent(method, path);
+  let netTries=0, rateTries=0;
+  for(;;){
+    if(KC && KC.limiter){
+      await KC.limiter.acquire(function(sec){ kinPaintWait(sec, opts.onWait); });
+      kinPaintWait(0);
+    }
+    if(KC) KC.setStatus('busy','');
+    try{
+      const text=await kinRawOnce(method, path, body, key);
+      if(KC) KC.setStatus('ok','');
+      return text;
+    }catch(e){
+      let err=e;
+      if(KC && KC.classifyKindroidError && err && err.kind!=='daily_cap' && !(err.name==='KindroidError' && err.kind)){
+        err=KC.classifyKindroidError(e, { status:e&&e.status });
+      } else if(KC && KC.classifyKindroidError && err && err.kind==='offline' && !err.retry){
+        err=KC.classifyKindroidError(e, { offline:true });
+      }
+      if(err && err.kind==='daily_cap'){ if(KC) KC.setStatus('ok',''); throw err; }
+      if(err && err.kind==='rate_limit'){
+        if(KC && KC.limiter) KC.limiter.penalize();
+        if(rateTries<1 && opts.noRateRetry!==true){ rateTries++; continue; }
+      } else if(KC && KC.isRetryable && KC.isRetryable(err) && safe && netTries<2 && opts.noRetry!==true){
+        if(KC) KC.statusFromError(err);
+        await waitMs(KC.backoffMs(netTries)); netTries++;
+        continue;
+      }
+      if(KC) KC.statusFromError(err);
+      throw err;
+    }
+  }
 }
 async function apiPost(path, body){ return kinRaw('POST', path, body); }
 
@@ -3508,12 +3926,14 @@ async function runChatJob(job){
   $('chatStatus').textContent=skip?'Continuing…':'Waiting…';
   var posted=false;
   try{
-    var gate=getChatRate();
-    if(gate && gate.wait){
-      var n=gate.sent ? gate.sent.length : 0;
-      if(n>=(gate.max||9)){
-        $('chatStatus').textContent='Waiting for Kindroid’s 10-per-30-seconds limit…';
-      }
+    var chatWait=function(sec){
+      kinPaintWait(sec);
+      $('chatStatus').textContent = sec>0 ? 'Kindroid allows 10 messages every 30 seconds — sending in '+sec+' s…' : (skip?'Continuing…':'Waiting…');
+    };
+    var gate=(window.KinClient && KinClient.limiter) || getChatRate();
+    if(gate && gate.acquire){
+      await gate.acquire(chatWait);
+    } else if(gate && gate.wait){
       await gate.wait();
       gate.mark();
     }
@@ -3522,7 +3942,11 @@ async function runChatJob(job){
       posted=true;
       reply=replyOld;
     } else {
-      var result=await KinClient.sendMessage({
+      var result=null, rateTries=0;
+      for(;;){
+      try{
+      KinClient.setStatus && KinClient.setStatus('busy','');
+      result=await KinClient.sendMessage({
         apiKey: readApiKey(),
         ai_id: c.ai_id,
         message: skip ? '...' : message,
@@ -3543,12 +3967,25 @@ async function runChatJob(job){
           $('chatStatus').textContent='Receiving…';
         }
       });
+      KinClient.setStatus && KinClient.setStatus('ok','');
+      break;
+      }catch(se){
+        // 429 = Kindroid did not take the message, so waiting and sending once more cannot double-post.
+        if(se && se.kind==='rate_limit' && !se.posted && !streamEl && rateTries<1 && KinClient.limiter){
+          rateTries++;
+          KinClient.limiter.penalize();
+          await KinClient.limiter.acquire(chatWait);
+          continue;
+        }
+        if(KinClient.statusFromError) KinClient.statusFromError(se);
+        throw se;
+      }
+      }
       posted=!!(result && result.posted);
       reply=(result && result.text) || reply || '';
     }
     if(window.KinClient && KinClient.looksLikeGenerationFail && KinClient.looksLikeGenerationFail(reply)){
-      var ge=KinClient.classifyKindroidError(new Error('generation'), { });
-      ge.kind='generation';
+      var ge=KinClient.KindroidError('generation','Kindroid could not generate a reply this time ("< >"). Wait a moment, then tap Send again.',{ retry:true });
       ge.posted=posted;
       throw ge;
     }
@@ -3855,7 +4292,13 @@ async function showFreshGroupReplies(group_id, seen, speak){
 }
 async function replyForGroupSpeaker(group_id, ai_id, pending){
   let reply='';
-  try{ reply=extractKindroidText(await apiPost('/groupchats-ai-response',{ group_id, ai_id, stream:false })); }catch(e){ reply=''; }
+  try{
+    let raw=String(await apiPost('/groupchats-ai-response',{ group_id, ai_id, stream:true })||'');
+    const mark=raw.indexOf('<<HTTP_ERROR>>');
+    if(mark>=0) raw=raw.slice(0, mark);
+    reply=extractKindroidText(raw.replace(/^[\s\u0000]+/,''));
+    if(/^<\s*>/.test(reply)) reply='';
+  }catch(e){ reply=''; if(e && (e.kind==='subscription' || e.kind==='auth' || e.kind==='forbidden')) throw e; }
   if(looksLikeRealReply(reply)) return reply;
   if(looksLikeRealReply(pending)) return pending;
   return '';
@@ -4074,6 +4517,11 @@ if($('btnToolTest')) $('btnToolTest').onclick=async()=>{
   if(!keyLooksGood(readApiKey())){ $('toolStatus').textContent='Paste the kn_ key in Settings first'; return; }
   const ai=(chars().find(c=>c.ai_id)||{}).ai_id;
   $('toolStatus').textContent='Testing…';
+  if(window.KinClient && KinClient.testKey){
+    const r=await KinClient.testKey({ apiKey:readApiKey(), fetchImpl:kindroidFetch, onWait:function(sec){ if(sec>0) $('toolStatus').textContent='Waiting for Kindroid\'s limit: '+sec+' s…'; } });
+    $('toolStatus').textContent = r.ok ? (ai ? 'Key works.' : 'Key works. Add a Kin by its Kin ID (Characters → Add Kins by ID), then Chat.') : r.message;
+    return;
+  }
   try{
     const id=ai||'00000000-0000-4000-8000-000000000000';
     await apiGet('/get-chat-messages?ai_id='+encodeURIComponent(id)+'&limit=1');
@@ -4423,7 +4871,7 @@ function collectBackup(){
   });
   var payload={
     format:'kin-studio-backup-v1',
-    app:'Kin Studio 1.15.0',
+    app:'Kin Studio 1.16.0',
     exportedAt:new Date().toISOString(),
     characters:chars(),
     personas:personas(),
@@ -4519,11 +4967,18 @@ function setupListenLive(){
   if(!$('listenLive') || !$('listenLive').checked) return;
   listenTimer=setInterval(async function(){
     const chatOn=$('p-chat') && $('p-chat').classList.contains('active');
-    if(!chatOn) return;
+    if(!chatOn || document.hidden) return;
+    if(typeof chatInFlight!=='undefined' && chatInFlight) return;
+    if(pullsToday()>=PULL_DAY_CAP-60) return; // keep pulls for Sync and setup
     const c=chars().find(x=>x.id===$('chatChar').value);
     if(!c||!c.ai_id) return;
     try{
-      const page=await fetchChatPage({ ai_id:c.ai_id, limit:8 });
+      const row=await histGet(threadKey('ai', c.ai_id));
+      const after=row.cursor || (row.messages.length?row.messages[row.messages.length-1].t:null);
+      if(!after) return; // tap Sync once first; without a cursor Kindroid returns the oldest messages
+      const page=await fetchChatPage({ ai_id:c.ai_id, limit:20, after:after });
+      const fresh=(page.raw||[]).map(mapKinApiMsg);
+      await mergeAndSave({ kind:'ai', id:c.ai_id, charId:c.id }, fresh, { cursor: page.last||after, silent:true });
       const mapped=(page.raw||[]).map(mapKinApiMsg).sort(function(a,b){ return (a.t||0)-(b.t||0); });
       if(!mapped.length) return;
       const last=mapped[mapped.length-1];
@@ -4537,7 +4992,7 @@ function setupListenLive(){
       await speakText(text, voiceForChar(c));
       yourTurn('chatStatus');
     }catch(_){}
-  }, 90000);
+  }, 120000);
 }
 
 
@@ -6296,6 +6751,9 @@ function setBusy(on){ G.busy=on; var st=$g('gmStage'); if(st) st.classList.toggl
 /* ---------- Kindroid calls: queue + 10 per 30 s limit + 429 + "< >" ---------- */
 var chain=Promise.resolve();
 function waitForSlot(){
+  if(window.KinClient && KinClient.limiter){
+    return KinClient.limiter.wait(function(sec){ if(sec>0) status('Kindroid allows 10 messages every 30 seconds. Waiting '+sec+' s…','warn'); });
+  }
   var now=Date.now(); G.sent=G.sent.filter(function(t){ return now-t<30000; });
   if(G.sent.length<9) return Promise.resolve();
   var wait=30000-(now-G.sent[0])+250;
@@ -6312,7 +6770,8 @@ function rawSend(message, attempt){
   if(!keyLooksGood(readApiKey())) return Promise.reject(new Error('Paste the kn_ key in Settings first.'));
   if(!c) return Promise.reject(new Error('Pick a character with a Kindroid AI ID.'));
   return waitForSlot().then(function(){
-    G.sent.push(Date.now()); status(kinName()+' is thinking…');
+    if(!(window.KinClient && KinClient.limiter)) G.sent.push(Date.now());
+    status(kinName()+' is thinking…');
     var ms=G.timeoutMs||75000;
     return Promise.race([
       apiPost('/send-message', { ai_id:kinAiId(c), message:message, stream:false }),
@@ -6325,11 +6784,12 @@ function rawSend(message, attempt){
     return t;
   }, function(e){
     var msg=String((e&&e.message)||e);
-    if(/^429|\b429\b/.test(msg) && attempt<2){
+    if((/^429|\b429\b/.test(msg) || (e && e.kind==='rate_limit')) && attempt<2){
       logLine('sys','Kindroid says slow down (429). Waiting 30 seconds, then trying again.',{cls:'warn'});
       return countdown(30000,'Rate limit — trying again in').then(function(){ return rawSend(message, attempt+1); });
     }
-    if(/^429|\b429\b/.test(msg)) throw new Error('Kindroid is still rate limiting (429). Wait a minute, then tap Retry.');
+    if(/^429|\b429\b/.test(msg) || (e && e.kind==='rate_limit')) throw new Error('Kindroid is still rate limiting (429). Wait a minute, then tap Retry.');
+    if(e && e.kind==='subscription') throw new Error(msg);
     if(/^40[04]\b/.test(msg) && /not found/i.test(msg)) throw new Error(msg+' — Kindroid does not know the AI ID saved for '+((c&&c.name)||'this Kin')+' ('+kinAiId(c)+'). Pick the Kin you chat with under Play against, or paste its Kin ID (bottom of its Kin settings in Kindroid) in the Characters tab, save, then tap Retry.');
     throw e;
   });
@@ -7352,6 +7812,346 @@ function init(){
 init();
 })();
 
+</script>
+<script>
+/* ===================== Kin Studio 1.16: connection pill, setup wizard, Fix my connection ===================== */
+(function(){
+"use strict";
+var K=window.KinClient||null;
+function $(id){ return document.getElementById(id); }
+function H(s){ return (typeof esc==='function')?esc(s):String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function show(el,on){ if(el) el.hidden=!on; }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+function clean(id){ return K&&K.cleanAiId ? K.cleanAiId(id) : String(id||'').trim(); }
+
+/* ---------- connection pill ---------- */
+var CONN={
+  ok:['Kindroid: connected','ok'], busy:['Kindroid: working…','busy'], waiting:['Kindroid limit: waiting','warn'],
+  offline:['Offline','bad'], auth:['Key problem','bad'], subscription:['Needs subscription','bad'],
+  error:['Kindroid error','warn'], unknown:['Kindroid: not checked','']
+};
+function paintConn(st){
+  var el=$('connPill'); if(!el) return;
+  st=st||(K&&K.getStatus&&K.getStatus())||{state:'unknown'};
+  var row=CONN[st.state]||CONN.unknown;
+  var label=row[0];
+  if(st.state==='waiting' && window.__kinWaitSec>0) label='Kindroid limit: '+window.__kinWaitSec+' s';
+  if(st.state==='unknown' && typeof keyLooksGood==='function' && typeof readApiKey==='function' && !keyLooksGood(readApiKey())) label='Kindroid: no key';
+  el.textContent='● '+label;
+  el.className='badge conn '+row[1];
+  el.title=st.detail||'Tap for Fix my connection';
+}
+window.kinPaintConn=paintConn;
+if(K&&K.onStatus) K.onStatus(paintConn);
+window.addEventListener('online', function(){ if(K) K.setStatus('unknown',''); });
+window.addEventListener('offline', function(){ if(K) K.setStatus('offline','No network on this phone.'); });
+if(navigator.onLine===false && K) K.setStatus('offline','No network on this phone.');
+if($('connPill')) $('connPill').onclick=function(){ openTab('tools'); setTimeout(function(){ try{ $('fixCard').scrollIntoView({behavior:'smooth',block:'start'}); }catch(_){} },50); };
+paintConn();
+
+function openTab(p){ var t=document.querySelector('.tab[data-p="'+p+'"]'); if(t) t.click(); }
+
+/* ---------- setup wizard ---------- */
+var W={ step:1, rows:[], saved:[], keyOk:false };
+function wizOpen(step){
+  var w=$('setupWiz'); if(!w) return;
+  w.hidden=false; document.documentElement.classList.add('wiz-open');
+  var hasKey=keyLooksGood(readApiKey());
+  if($('wizKeySaved')) show($('wizKeySaved'), hasKey);
+  if(step==null) step = hasKey ? 2 : 1;
+  if(hasKey) W.keyOk=true;
+  if($('wizKeyNext')) $('wizKeyNext').disabled=!W.keyOk;
+  wizStep(step);
+}
+function wizClose(){
+  var w=$('setupWiz'); if(!w) return;
+  w.hidden=true; document.documentElement.classList.remove('wiz-open');
+  if($('wizKey')) $('wizKey').value='';
+  store.set('setupSeen', { at:Date.now(), v:'1.16.0' });
+}
+function wizStep(n){
+  W.step=n;
+  document.querySelectorAll('#setupWiz [data-step]').forEach(function(s){ s.hidden = Number(s.dataset.step)!==n; });
+  document.querySelectorAll('#wizDots span').forEach(function(d,i){ d.classList.toggle('on', i+1===n); d.classList.toggle('done', i+1<n); });
+  if(n===2) renderRows();
+  if(n===3) renderVoicePick();
+  if(n===4) renderDone();
+  try{ $('setupWiz').querySelector('.wiz-card').scrollTop=0; }catch(_){}
+}
+window.kinOpenSetup=wizOpen;
+
+async function pasteInto(id){
+  var el=$(id); if(!el) return;
+  try{
+    if(navigator.clipboard && navigator.clipboard.readText){ var t=await navigator.clipboard.readText(); if(t){ el.value=t; el.dispatchEvent(new Event('input')); return; } }
+  }catch(_){}
+  el.focus();
+  var st=id==='wizKey'?$('wizKeyStatus'):$('wizIdsStatus');
+  if(st) st.textContent='Long-press the box and tap Paste.';
+}
+function waitNote(el){ return function(sec){ if(el && sec>0) el.textContent='Kindroid allows 10 requests every 30 seconds. Next check in '+sec+' s…'; }; }
+
+/* step 1: key */
+if($('wizPaste')) $('wizPaste').onclick=function(){ pasteInto('wizKey'); };
+if($('wizKey')) $('wizKey').addEventListener('input', function(){ W.keyOk=false; if($('wizKeyNext')) $('wizKeyNext').disabled=true; if($('wizKeyStatus')) $('wizKeyStatus').textContent=''; });
+async function wizTestKey(){
+  var st=$('wizKeyStatus');
+  var typed=normalizeKey($('wizKey').value||'');
+  var key=typed || readApiKey();
+  if(!typed && !keyLooksGood(key)){ st.innerHTML='<span class="error">Paste your key first. It starts with kn_.</span>'; return; }
+  if(!keyLooksGood(key)){ st.innerHTML='<span class="error">That doesn\'t look like a Kindroid API key. It starts with kn_ and has no spaces. Copy it again.</span>'; return; }
+  st.textContent='Testing with Kindroid…';
+  $('wizTestKey').disabled=true;
+  var r;
+  try{ r=await K.testKey({ apiKey:key, fetchImpl:kindroidFetch, onWait:waitNote(st) }); }
+  catch(e){ r={ ok:false, message:kinRedact(e&&e.message||e) }; }
+  $('wizTestKey').disabled=false;
+  if(r.ok){
+    if(typed){ $('apiKey').value=typed; persistSettings('API key saved.'); }
+    $('wizKey').value='';
+    W.keyOk=true; $('wizKeyNext').disabled=false;
+    st.innerHTML='<span class="ok-text">✓ Key works. It is saved on this phone.</span>';
+    show($('wizKeySaved'), true);
+  } else {
+    W.keyOk=false; $('wizKeyNext').disabled=true;
+    st.innerHTML='<span class="error">'+H(r.message)+'</span>';
+    if(r.state==='subscription' && typed){ /* key may be right: let them keep going */ $('apiKey').value=typed; persistSettings('API key saved.'); $('wizKeyNext').disabled=false; st.innerHTML+=' <span class="hint">Saved anyway, so you can keep setting up.</span>'; }
+  }
+}
+if($('wizTestKey')) $('wizTestKey').onclick=wizTestKey;
+if($('wizKeyNext')) $('wizKeyNext').onclick=function(){ wizStep(2); };
+
+/* step 2: Kins */
+if($('wizIdsPaste')) $('wizIdsPaste').onclick=function(){ pasteInto('wizIds'); };
+function existingByAi(id){ return chars().find(function(c){ return clean(c.ai_id)===id; })||null; }
+async function wizCheckIds(){
+  var st=$('wizIdsStatus');
+  var list=K.parseKinList($('wizIds').value||'');
+  if(!list.length){ st.innerHTML='<span class="error">Paste at least one Kin ID.</span>'; return; }
+  var look=$('wizLookup') && $('wizLookup').checked && keyLooksGood(readApiKey());
+  var budget=PULL_DAY_CAP-pullsToday()-10;
+  W.rows=list.map(function(x){
+    var ex=existingByAi(x.ai_id);
+    return { ai_id:x.ai_id, name:x.name || (ex&&ex.name) || '', greeting:'', state: x.problem?'bad':(x.duplicate?'dup':'pending'), message: x.problem || (x.duplicate?'Listed twice — only added once.':''), existing: ex?ex.id:'', add: !x.problem && !x.duplicate };
+  });
+  renderRows();
+  $('wizCheckIds').disabled=true;
+  var todo=W.rows.filter(function(r){ return r.state==='pending'; });
+  for(var i=0;i<todo.length;i++){
+    var r=todo[i];
+    if(!look || budget<=0){ r.state='unchecked'; r.message=look?'Not looked up (daily history pulls are low). Saved as typed.':'Not looked up. Saved as typed.'; continue; }
+    st.textContent='Checking '+(i+1)+' of '+todo.length+'…';
+    var res=await K.inspectKin({ apiKey:readApiKey(), ai_id:r.ai_id, fetchImpl:kindroidFetch, onPull:notePull, onWait:waitNote(st) });
+    budget--;
+    if(res.ok){
+      r.state='ok'; r.greeting=res.greeting||'';
+      if(!r.name && res.name) r.name=res.name;
+      r.kname=res.name||'';
+      r.message=(res.name?'Found '+res.name+'.':'Found.')+(res.count?'':' No messages yet.');
+    } else if(res.state==='not_found'){ r.state='bad'; r.add=false; r.message=res.message; }
+    else if(res.state==='bad_key'){ r.state='unchecked'; r.message=res.message+' Go back and test your key.'; }
+    else { r.state='unchecked'; r.message=res.message+' Saved as typed — you can check it later in Tools → Fix my connection.'; }
+    renderRows();
+  }
+  $('wizCheckIds').disabled=false;
+  var good=W.rows.filter(function(r){ return r.add; }).length;
+  st.textContent= good ? good+' ready to save. Fix or untick anything marked ✗.' : 'Nothing to save yet. Fix the IDs marked ✗ and check again.';
+  renderRows();
+}
+function renderRows(){
+  var box=$('wizIdList'); if(!box) return;
+  box.innerHTML=W.rows.map(function(r,i){
+    var icon={ok:'✓',bad:'✗',dup:'•',pending:'…',unchecked:'?'}[r.state]||'';
+    return '<div class="wiz-row '+r.state+'">'+
+      '<label class="wiz-add"><input type="checkbox" data-wadd="'+i+'"'+(r.add?' checked':'')+(r.state==='bad'||r.state==='dup'?' disabled':'')+'> Add</label>'+
+      '<div class="wiz-main"><input class="wiz-name" data-wname="'+i+'" value="'+H(r.name)+'" placeholder="Name"><div class="hint"><span class="wiz-ic">'+icon+'</span> '+H(r.ai_id)+(r.existing?' · already saved, will be updated':'')+'</div>'+
+      (r.message?'<div class="hint">'+H(r.message)+'</div>':'')+
+      (r.greeting?'<div class="hint wiz-greet">Greeting: '+H(r.greeting.slice(0,140))+(r.greeting.length>140?'…':'')+'</div>':'')+
+      '</div></div>';
+  }).join('');
+  box.querySelectorAll('[data-wadd]').forEach(function(c){ c.onchange=function(){ W.rows[Number(c.dataset.wadd)].add=c.checked; paintSave(); }; });
+  box.querySelectorAll('[data-wname]').forEach(function(c){ c.oninput=function(){ W.rows[Number(c.dataset.wname)].name=c.value; }; });
+  paintSave();
+}
+function paintSave(){ if($('wizSaveKins')) $('wizSaveKins').disabled=!W.rows.some(function(r){ return r.add && r.state!=='pending'; }); }
+if($('wizCheckIds')) $('wizCheckIds').onclick=wizCheckIds;
+if($('wizSaveKins')) $('wizSaveKins').onclick=function(){
+  var list=chars(); W.saved=[];
+  W.rows.forEach(function(r){
+    if(!r.add || r.state==='pending') return;
+    var ex=r.existing && list.find(function(c){ return c.id===r.existing; });
+    if(ex){
+      ex.ai_id=r.ai_id;
+      if(r.name && r.name.trim()) ex.name=r.name.trim();
+      if(!ex.greeting && r.greeting) ex.greeting=r.greeting;
+      W.saved.push(ex.id);
+    } else {
+      var c=mapRawToChar({ name:(r.name||'').trim()||r.kname||'Kin', ai_id:r.ai_id, greeting:r.greeting||'' });
+      list.push(c); W.saved.push(c.id);
+    }
+  });
+  saveChars(list);
+  try{ renderChars(); refreshSelects(); }catch(_){}
+  if(W.saved.length){ store.set('lastChatChar', W.saved[0]); }
+  wizStep(3);
+};
+if($('wizBack2')) $('wizBack2').onclick=function(){ wizStep(1); };
+if($('wizSkip2')) $('wizSkip2').onclick=function(){ W.saved=[]; wizStep(4); };
+
+/* step 3: voices (the same 28 Kokoro voices as the Voices tab) */
+function voiceOptionsHtml(){ var s=$('piperVoice'); return s?s.innerHTML.replace(/\sselected(="[^"]*")?/g,''):'<option value="af_heart">Heart (A)</option>'; }
+function voiceLabel(id){ var s=$('piperVoice'); var o=s&&Array.from(s.options).find(function(x){ return x.value===id; }); return o?o.textContent.replace(/\s*\(.*\)\s*$/,''):id; }
+function renderVoicePick(){
+  var box=$('wizVoiceList'); if(!box) return;
+  var cs=W.saved.map(function(id){ return chars().find(function(c){ return c.id===id; }); }).filter(Boolean);
+  if(!cs.length){ box.innerHTML='<p class="hint">No new Kins to give voices. You can do this any time on the Voices tab.</p>'; return; }
+  box.innerHTML=cs.map(function(c,i){
+    var v=voiceForChar(c);
+    return '<div class="wiz-row ok"><div class="wiz-main"><strong>'+H(c.name)+'</strong>'+
+      (v?'<div class="hint">Current voice: '+H(v.name)+'</div>':'')+
+      '<div class="row" style="align-items:center"><select data-wv="'+H(c.id)+'" style="flex:3 1 180px;margin:0">'+(v?'<option value="">Keep current voice</option>':'')+voiceOptionsHtml()+'</select>'+
+      '<button type="button" class="btn secondary" data-wvt="'+H(c.id)+'" style="flex:0 0 auto;width:auto">Test</button></div></div></div>';
+  }).join('');
+  box.querySelectorAll('select[data-wv]').forEach(function(s){ if(!s.value) return; if(!voiceForChar(chars().find(function(c){return c.id===s.dataset.wv;}))) s.value='af_heart'; });
+  box.querySelectorAll('[data-wvt]').forEach(function(b){ b.onclick=function(){
+    var c=chars().find(function(x){ return x.id===b.dataset.wvt; }); var s=box.querySelector('select[data-wv="'+b.dataset.wvt+'"]');
+    var pid=(s&&s.value)||((voiceForChar(c)||{}).piperId)||'af_heart';
+    $('wizVoiceStatus').textContent='Loading voice… the first test can take a little while.';
+    Promise.resolve(speakText('Hi, I\'m '+((c&&c.name)||'your Kin')+'. This is how I\'ll sound in Kin Studio.', { piperId:pid, rate:100, pitch:100, volume:100 }))
+      .then(function(){ $('wizVoiceStatus').textContent=''; }, function(e){ $('wizVoiceStatus').textContent='Voice test failed: '+(e&&e.message||e); });
+  }; });
+}
+if($('wizSaveVoices')) $('wizSaveVoices').onclick=function(){
+  try{ stopSpeaking(); }catch(_){}
+  var list=chars(), vs=voices();
+  document.querySelectorAll('#wizVoiceList select[data-wv]').forEach(function(s){
+    if(!s.value) return;
+    var c=list.find(function(x){ return x.id===s.dataset.wv; }); if(!c) return;
+    var pid=s.value;
+    var v={ id:uid(), name:(c.name||'Kin')+' · '+voiceLabel(pid), description:'', engineIndex:0, voiceName:'', voiceURI:'', lang:/^b/.test(pid)?'en-GB':'en-US',
+      gender:/^.f_/.test(pid)?'female':(/^.m_/.test(pid)?'male':'unknown'), rate:100, pitch:100, volume:100, stability:70, expressiveness:40, piperId:pid };
+    vs.push(v); c.voice_id=v.id;
+  });
+  saveVoices(vs); saveChars(list);
+  try{ renderVoices(); renderChars(); refreshSelects(); }catch(_){}
+  wizStep(4);
+};
+if($('wizBack3')) $('wizBack3').onclick=function(){ wizStep(2); };
+
+/* step 4 */
+function renderDone(){
+  var n=chars().filter(function(c){ return clean(c.ai_id); }).length;
+  $('wizDoneText').innerHTML = n
+    ? 'Kin Studio is connected. You have <strong>'+n+'</strong> Kin'+(n===1?'':'s')+' ready. Chat, Games and Groups all share Kindroid\'s limit of 10 requests every 30 seconds — if you hit it, the app waits and counts down instead of failing.'
+    : 'Your key is saved. Add a Kin any time from <strong>Characters → Add Kins by ID</strong>.';
+  store.set('setupDone', { at:Date.now(), v:'1.16.0' });
+}
+if($('wizOpenChat')) $('wizOpenChat').onclick=function(){
+  wizClose(); openTab('chat');
+  try{ var last=store.get('lastChatChar',''); if(last && $('chatChar')){ $('chatChar').value=last; $('chatChar').dispatchEvent(new Event('change')); } if(typeof syncChatHeader==='function') syncChatHeader(); }catch(_){}
+  try{ $('chatMsg').focus(); }catch(_){}
+};
+if($('wizAddMore')) $('wizAddMore').onclick=function(){ $('wizIds').value=''; W.rows=[]; wizStep(2); };
+if($('wizClose')) $('wizClose').onclick=wizClose;
+document.addEventListener('keydown', function(e){ if(e.key==='Escape' && $('setupWiz') && !$('setupWiz').hidden) wizClose(); });
+
+/* entry points */
+if($('btnOpenSetup')) $('btnOpenSetup').onclick=function(){ wizOpen(1); };
+if($('btnGuideSetup')) $('btnGuideSetup').onclick=function(){ wizOpen(); };
+if($('btnBulkKins')) $('btnBulkKins').onclick=function(){ if(!keyLooksGood(readApiKey())) wizOpen(1); else { W.rows=[]; if($('wizIds')) $('wizIds').value=''; wizOpen(2); } };
+if($('btnEmptySetup')) $('btnEmptySetup').onclick=function(){ wizOpen(); };
+
+/* empty states */
+function paintEmpty(){
+  var hasKey=keyLooksGood(readApiKey());
+  var kins=chars().filter(function(c){ return clean(c.ai_id); }).length;
+  var e=$('chatEmpty');
+  if(e){
+    show(e, !hasKey || !kins);
+    if($('chatEmptyText')) $('chatEmptyText').textContent = !hasKey
+      ? 'Kin Studio isn\'t connected to Kindroid yet. Setup takes about a minute: paste your API key, then your Kin IDs.'
+      : 'No Kins yet. Add one by its Kin ID (bottom of the Kin\'s settings in Kindroid) — you can paste several at once.';
+  }
+}
+window.kinPaintEmpty=paintEmpty;
+document.querySelectorAll('.tab').forEach(function(b){ b.addEventListener('click', function(){ setTimeout(paintEmpty,0); setTimeout(paintConn,0); }); });
+
+/* ---------- Fix my connection ---------- */
+function fixLine(ok, title, detail, action){
+  return '<div class="fix-row '+(ok===true?'ok':ok===false?'bad':'warn')+'"><span class="fix-ic">'+(ok===true?'✓':ok===false?'✗':'!')+'</span><div><strong>'+H(title)+'</strong>'+(detail?'<div class="hint">'+H(detail)+'</div>':'')+(action||'')+'</div></div>';
+}
+async function runFix(opts){
+  opts=opts||{};
+  var out=$('fixResults'), st=$('fixStatus'); if(!out) return;
+  var rows=[];
+  function paint(){ out.innerHTML=rows.join(''); }
+  $('btnFixRun').disabled=true; if($('btnFixKins')) $('btnFixKins').disabled=true;
+  // 1 network
+  var online=navigator.onLine!==false;
+  rows.push(fixLine(online, online?'Phone is online':'No network', online?'':'Turn on Wi-Fi or mobile data, then run this again.')); paint();
+  // 2 key format
+  var key=readApiKey(), fmt=keyLooksGood(key);
+  rows.push(fixLine(fmt, fmt?'API key is saved on this phone':'No API key saved', fmt?'(It is never shown here.)':'Open Setup and paste the key from Kindroid → Profile → Preferences → API & Integrations.', fmt?'':'<button type="button" class="btn" data-fix="setup" style="margin-top:6px">Open setup</button>')); paint();
+  // 3 limiter
+  var snap=K&&K.limiter?K.limiter.snapshot():null;
+  if(snap) rows.push(fixLine(snap.waitMs<=0?true:null, snap.waitMs<=0?'Rate limit: OK':'Rate limit: waiting '+Math.ceil(snap.waitMs/1000)+' s', snap.used+' of 10 requests used in the last 30 seconds (shared by Chat, Games, Groups and Sync).'));
+  // 4 pulls
+  var p=pullsToday();
+  rows.push(fixLine(p<PULL_DAY_CAP-50?true:(p<PULL_DAY_CAP?null:false), 'History pulls today: '+p+' / '+PULL_DAY_CAP, p>=PULL_DAY_CAP?'Daily cap reached. Sync works again 24 hours after the oldest pull. Chat still works.':(($('listenLive')&&$('listenLive').checked)?'Listen live is on — it uses pulls while Chat is open. Turn it off if you only send from here.':''))); paint();
+  // 5 live key test
+  if(online && fmt){
+    st.textContent='Testing the key with Kindroid…';
+    var r=await K.testKey({ apiKey:key, fetchImpl:kindroidFetch, onWait:waitNote(st) });
+    rows.push(fixLine(r.ok?true:(r.state==='rate_limit'||r.state==='offline'?null:false), r.ok?'Kindroid accepted the key':'Key test: '+r.state.replace('_',' '), r.ok?'':r.message, r.ok?'':'<button type="button" class="btn" data-fix="setup" style="margin-top:6px">Paste a new key</button>')); paint();
+  }
+  // 6 AI IDs (offline check)
+  var cs=chars(), dirty=0, bad=[], none=0;
+  cs.forEach(function(c){ var raw=String(c.ai_id||''); if(!raw){ none++; return; } var cl=clean(raw); if(cl!==raw) dirty++; var pr=K.aiIdProblem(cl); if(pr) bad.push((c.name||'Kin')+': '+pr); });
+  if(!cs.length) rows.push(fixLine(false,'No Kins saved','Add your Kins by their Kin ID.','<button type="button" class="btn" data-fix="kins" style="margin-top:6px">Add Kins by ID</button>'));
+  else {
+    rows.push(fixLine(dirty?null:true, dirty?dirty+' Kin ID'+(dirty===1?' has':'s have')+' hidden spaces or characters':'Kin IDs look clean', dirty?'This is a common cause of "AI not found". Tap Clean up to fix them.':'', dirty?'<button type="button" class="btn" data-fix="clean" style="margin-top:6px">Clean up Kin IDs</button>':''));
+    if(bad.length) rows.push(fixLine(false, bad.length+' Kin ID'+(bad.length===1?' looks':'s look')+' wrong', bad.join(' · ')));
+    if(none) rows.push(fixLine(null, none+' character'+(none===1?' has':'s have')+' no Kin ID', 'They work for Vignette and copy fields, but not Chat or Games.'));
+  }
+  paint();
+  // 7 optional live Kin check
+  if(opts.kins && online && fmt){
+    var withId=cs.filter(function(c){ return clean(c.ai_id) && !K.aiIdProblem(clean(c.ai_id)); });
+    var left=PULL_DAY_CAP-pullsToday()-10;
+    for(var i=0;i<withId.length;i++){
+      if(left<=0){ rows.push(fixLine(null,'Stopped checking Kins','Daily history pulls are low.')); break; }
+      st.textContent='Checking '+withId[i].name+' ('+(i+1)+' of '+withId.length+')…';
+      var res=await K.inspectKin({ apiKey:key, ai_id:clean(withId[i].ai_id), fetchImpl:kindroidFetch, onPull:notePull, onWait:waitNote(st) });
+      left--;
+      rows.push(fixLine(res.ok?true:(res.state==='not_found'||res.state==='subscription'?false:null), (withId[i].name||'Kin')+(res.ok?': found on Kindroid':': '+res.state.replace('_',' ')), res.ok?(res.name&&res.name!==withId[i].name?'Kindroid calls this Kin '+res.name+'.':''):res.message));
+      paint();
+    }
+  }
+  st.textContent='Done. '+(out.querySelectorAll('.fix-row.bad').length?'Fix the ✗ items above.':'Everything checked looks good.');
+  $('btnFixRun').disabled=false; if($('btnFixKins')) $('btnFixKins').disabled=false;
+  out.querySelectorAll('[data-fix]').forEach(function(b){ b.onclick=function(){
+    var a=b.dataset.fix;
+    if(a==='setup') wizOpen(1);
+    else if(a==='kins') $('btnBulkKins').click();
+    else if(a==='clean'){ var l=chars(); var n=0; l.forEach(function(c){ var cl=clean(c.ai_id); if(cl!==String(c.ai_id||'')){ c.ai_id=cl; n++; } }); saveChars(l); try{ renderChars(); refreshSelects(); }catch(_){} b.replaceWith(document.createTextNode('Cleaned '+n+'.')); }
+  }; });
+}
+window.kinRunFix=runFix;
+if($('btnFixRun')) $('btnFixRun').onclick=function(){ runFix({}); };
+if($('btnFixKins')) $('btnFixKins').onclick=function(){ if(confirm('Look up every saved Kin on Kindroid? Each uses 1 of the 600 daily history pulls.')) runFix({ kins:true }); };
+
+/* first run */
+function firstRun(){
+  paintEmpty(); paintConn();
+  var seen=store.get('setupSeen',null), done=store.get('setupDone',null);
+  var hasKey=keyLooksGood(readApiKey());
+  var kins=chars().filter(function(c){ return clean(c.ai_id); }).length;
+  if(/[?&]nosetup\b/.test(location.search)) return;
+  if((!hasKey || !kins) && !seen && !done) wizOpen();
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(firstRun,150); });
+else setTimeout(firstRun,150);
+})();
 </script>
 <script src="/archive.js"></script>
 </body>

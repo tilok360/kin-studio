@@ -1,4 +1,4 @@
-/* Node tests for Kin Studio 1.15.0 chat reliability. No real Kindroid calls. */
+/* Node tests for Kin Studio 1.16.0 chat reliability. No real Kindroid calls. */
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -106,7 +106,10 @@ test("classify: 429, 401, 403, offline, timeout, generation", () => {
 test("classify never echoes a kn_ key from a raw error body", () => {
   const e = KinClient.classifyKindroidError(new Error("500: leaked " + KEY), { status: 500 });
   assert.equal(e.message.includes(KEY), false);
-  assert.match(e.message, /redacted/);
+  assert.equal(e.kind, "server");
+  const e2 = KinClient.classifyKindroidError(new Error("418: leaked " + KEY), { status: 418 });
+  assert.equal(e2.message.includes(KEY), false);
+  assert.match(e2.message, /redacted/);
 });
 
 test("StreamAssembler drops leading keep-alive whitespace", () => {
