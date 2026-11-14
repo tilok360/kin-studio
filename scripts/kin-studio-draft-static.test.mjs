@@ -16,19 +16,19 @@ const urlf = readFileSync(join(root, "public/downloads/Kin-Studio-Windows.url"),
 const APK = "https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk";
 const SITE = "https://kin-studio1.grok.me";
 
-test("package and apk-version are 1.17.0 / 2.6 / 17", () => {
-  assert.equal(pkg.version, "1.17.0");
-  assert.equal(apk.app, "1.17.0");
-  assert.equal(apk.versionName, "2.6");
-  assert.equal(apk.versionCode, 17);
+test("package and apk-version are 1.18.0 / 2.7 / 18", () => {
+  assert.equal(pkg.version, "1.18.0");
+  assert.equal(apk.app, "1.18.0");
+  assert.equal(apk.versionName, "2.7");
+  assert.equal(apk.versionCode, 18);
   assert.equal(apk.applicationId, "com.kinvoicehelper.app");
 });
 
-test("phone.html is 1.17.0 and points at the new site and latest APK", () => {
-  assert.match(html, /Kin Studio 1\.17\.0/);
-  assert.match(html, /androidCode:17/);
-  assert.match(html, /androidName:"2\.6"/);
-  assert.match(html, /versionCode 17/);
+test("phone.html is 1.18.0 and points at the new site and latest APK", () => {
+  assert.match(html, /Kin Studio 1\.18\.0/);
+  assert.match(html, /androidCode:18/);
+  assert.match(html, /androidName:"2\.7"/);
+  assert.match(html, /versionCode 18/);
   assert.match(html, new RegExp(SITE.replace(/[.]/g, "\\.")));
   assert.match(html, new RegExp(APK.replace(/[.]/g, "\\.")));
   assert.match(html, /id="btnChatCancel"/);

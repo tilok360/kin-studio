@@ -1,9 +1,12 @@
-/* Kin Studio chat client — 1.16.0.
+/* Kin Studio chat client — 1.18.0.
    Official Kindroid send-message helper: streaming with fallback, 75s timeout,
    rate-limit / auth / offline errors, a send queue, and secret redaction.
    1.16: one shared rate limiter for every Kindroid call (10 per 30 s, auto-wait
    with a countdown), retry/backoff helpers, a connection-status feed, AI ID
    clean-up and bulk-list parsing, live key test and Kin lookup for setup.
+   1.18: "Talk as" persona switching and the Learned context editor. Both use
+   update-info fields Kindroid has NOT documented (found by other API users);
+   they may change or stop working, so every failure is reported plainly.
    Never logs or returns the kn_ API key. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -642,6 +645,171 @@
     return { ok: true, state: "ok", ai_id: id, name: name, greeting: greeting, count: msgs.length, message: msgs.length ? "Found." : "Found (no messages yet)." };
   }
 
+  /* ---------- 1.18: undocumented update-info helpers ----------
+     Kindroid has no GET for Kin fields, so nothing here can read the current
+     persona, learned context or revision back. The app keeps its own copy. */
+
+  /* Gender words as the Kindroid app shows them. A guess: not documented for personas. */
+  var PERSONA_GENDER = { male: "Male", female: "Female", nonbinary: "Non-binary" };
+
+  /* Body for a persona switch. With a Kindroid persona ID it uses active_persona_id (undocumented).
+     Without one it falls back to the documented account-wide user_name / user_gender only. */
+  function personaSwitchBody(ai_id, persona) {
+    persona = persona || {};
+    var body = { ai_id: String(ai_id || "") };
+    var pid = String(persona.kindroidPersonaId || "").replace(INVISIBLE_RE, "").trim();
+    if (persona.name) body.user_name = String(persona.name).slice(0, 100);
+    if (persona.gender && PERSONA_GENDER[persona.gender]) body.user_gender = PERSONA_GENDER[persona.gender];
+    if (pid) {
+      body.active_persona_id = pid;
+      if (persona.backstory) body.user_backstory = String(persona.backstory).slice(0, 1000);
+    }
+    return body;
+  }
+  function personaMode(persona) {
+    return persona && String(persona.kindroidPersonaId || "").trim() ? "persona_id" : "name_only";
+  }
+
+  /* One persona-switched send at a time, so two sends can't interleave their switch / switch-back. */
+  var personaLock = Promise.resolve();
+
+  /* Switch to `persona`, run send(), then switch back to `home` in a finally block.
+     opts: { call(path, body) -> Promise (must go through the shared limiter), ai_id, persona, home,
+             send() -> Promise, onStep(step) }
+     Throws a KindroidError with kind "persona_switch" (nothing was sent) when the switch itself fails.
+     The result has restored:false and restoreError when switching back failed. */
+  function sendAsPersona(opts) {
+    opts = opts || {};
+    var run = personaLock.then(function () { return sendAsPersonaNow(opts); });
+    personaLock = run.then(function () {}, function () {});
+    return run;
+  }
+  async function sendAsPersonaNow(opts) {
+    var call = opts.call;
+    var step = typeof opts.onStep === "function" ? opts.onStep : function () {};
+    if (typeof call !== "function" || typeof opts.send !== "function") {
+      throw KindroidError("error", "sendAsPersona needs call() and send().", { retry: false });
+    }
+    if (!opts.ai_id) throw KindroidError("persona_switch", "Talk as needs a Kin with an AI ID to switch through. Nothing was sent.", { retry: false });
+    if (!opts.home) throw KindroidError("persona_switch", "Pick the persona to switch back to (Personas tab, \"Switch back to this one\") before using Talk as. Nothing was sent.", { retry: false });
+    step("switch");
+    try {
+      await call("/update-info", personaSwitchBody(opts.ai_id, opts.persona));
+    } catch (e) {
+      var st = e && e.status;
+      var why = st === 400 || st === 404 || (e && e.kind === "not_found")
+        ? "Kindroid didn't accept the persona switch (" + (st || "400/404") + "). Persona switching uses a part of Kindroid's API that isn't documented, and it may have changed. Check the Kindroid persona ID on the Personas tab."
+        : redact((e && e.message) || "The persona switch failed.");
+      var pe = KindroidError("persona_switch", why + " Nothing was sent.", { retry: false, status: st });
+      pe.cause = e && e.kind;
+      pe.posted = false;
+      throw pe;
+    }
+    var result, sendErr = null, restored = false, restoreError = "";
+    try {
+      step("send");
+      result = await opts.send();
+    } catch (e) {
+      sendErr = e;
+    } finally {
+      step("restore");
+      try {
+        await call("/update-info", personaSwitchBody(opts.ai_id, opts.home));
+        restored = true;
+      } catch (re) {
+        restoreError = redact((re && re.message) || "switch back failed");
+      }
+      step("done");
+    }
+    if (sendErr) {
+      sendErr.personaRestored = restored;
+      if (!restored) sendErr.personaRestoreError = restoreError;
+      throw sendErr;
+    }
+    return { result: result, restored: restored, restoreError: restoreError };
+  }
+
+  /* Learned context (developed_context). Caps match the Characters tab, which follows the Kindroid app. */
+  var LEARNED_FIELDS = [
+    { key: "self_relationship", local: "growth", label: "Growth & relationship", max: 800 },
+    { key: "durable_facts", local: "importantFacts", label: "Important facts", max: 1200 },
+    { key: "ongoing_context", local: "ongoingThreads", label: "Ongoing threads", max: 800 }
+  ];
+  /* Used only when the user has no revision number. A documented GUESS, not something Kindroid published. */
+  var LEARNED_REVISION_GUESS = 0;
+
+  function parseRevision(v) {
+    if (v == null) return null;
+    var s = String(v).trim();
+    if (!/^\d{1,12}$/.test(s)) return null;
+    return Number(s);
+  }
+  /* Validate and build the update-info body. All three fields and the revision are required by Kindroid. */
+  function learnedContextBody(ai_id, fields, revision) {
+    fields = fields || {};
+    var problems = [];
+    var id = cleanAiId(ai_id);
+    var idp = aiIdProblem(id);
+    if (idp) problems.push(idp === "empty" ? "This Kin needs an AI ID." : idp);
+    var dc = {};
+    LEARNED_FIELDS.forEach(function (f) {
+      var v = fields[f.key] != null ? fields[f.key] : fields[f.local];
+      v = String(v == null ? "" : v).replace(/\r\n/g, "\n");
+      if (v.length > f.max) problems.push(f.label + " is " + v.length + " characters; the limit is " + f.max + ".");
+      dc[f.key] = v;
+    });
+    var rev = parseRevision(revision);
+    if (rev == null) problems.push("Revision must be a whole number.");
+    return { ok: !problems.length, problems: problems, body: { ai_id: id, developed_context: dc, developed_context_revision: rev } };
+  }
+  /* Look for a revision number in a 409 body, in case Kindroid sends the current one back. Unverified. */
+  function revisionFromBody(text) {
+    var s = String(text || "");
+    try {
+      var j = JSON.parse(s);
+      var found = null;
+      (function walk(o, depth) {
+        if (found != null || !o || typeof o !== "object" || depth > 4) return;
+        Object.keys(o).forEach(function (k) {
+          if (found != null) return;
+          if (/revision/i.test(k) && parseRevision(o[k]) != null) found = parseRevision(o[k]);
+          else walk(o[k], depth + 1);
+        });
+      })(j, 0);
+      if (found != null) return found;
+    } catch (_) { /* not JSON; try plain text below */ }
+    var m = s.match(/revision[^0-9]{0,24}(\d{1,12})/i);
+    return m ? Number(m[1]) : null;
+  }
+  /* Push learned context. opts: { call(path, body) (shared limiter), ai_id, fields, revision }
+     Result: { ok, state: "ok" | "invalid" | "conflict" | "bad_request" | "error", message, sentRevision, serverRevision, body } */
+  async function pushLearnedContext(opts) {
+    opts = opts || {};
+    var built = learnedContextBody(opts.ai_id, opts.fields, opts.revision);
+    if (!built.ok) return { ok: false, state: "invalid", message: built.problems.join(" "), body: built.body };
+    try {
+      await opts.call("/update-info", built.body);
+    } catch (e) {
+      var st = e && e.status;
+      var raw = (e && (e.body || e.message)) || "";
+      if (st === 409 || (e && e.kind === "conflict")) {
+        var srv = revisionFromBody(raw);
+        return {
+          ok: false, state: "conflict", sentRevision: built.body.developed_context_revision, serverRevision: srv, body: built.body,
+          message: "Kindroid said the learned context changed since revision " + built.body.developed_context_revision +
+            " (409). Your Kin probably learned something new on its own. Nothing was changed. Open the Kin in the Kindroid app, copy the three Learned context fields again, paste them here, add your edits, and push again" +
+            (srv != null ? " (Kindroid mentioned revision " + srv + ")." : ".")
+        };
+      }
+      if (st === 400) {
+        return { ok: false, state: "bad_request", sentRevision: built.body.developed_context_revision, body: built.body,
+          message: "Kindroid rejected the learned context (400). This part of the API isn't documented and may have changed, or a field is too long. Nothing was changed." };
+      }
+      return { ok: false, state: "error", sentRevision: built.body.developed_context_revision, body: built.body, message: redact((e && e.message) || "Push failed.") };
+    }
+    return { ok: true, state: "ok", sentRevision: built.body.developed_context_revision, body: built.body, message: "Learned context pushed to Kindroid." };
+  }
+
   function ChatQueue(sendFn) {
     this._send = sendFn;
     this._q = [];
@@ -762,6 +930,16 @@
     inspectKin: inspectKin,
     ChatQueue: ChatQueue,
     stripSecretsFromExport: stripSecretsFromExport,
-    looksLikeGenerationFail: looksLikeGenerationFail
+    looksLikeGenerationFail: looksLikeGenerationFail,
+    PERSONA_GENDER: PERSONA_GENDER,
+    personaSwitchBody: personaSwitchBody,
+    personaMode: personaMode,
+    sendAsPersona: sendAsPersona,
+    LEARNED_FIELDS: LEARNED_FIELDS,
+    LEARNED_REVISION_GUESS: LEARNED_REVISION_GUESS,
+    parseRevision: parseRevision,
+    learnedContextBody: learnedContextBody,
+    revisionFromBody: revisionFromBody,
+    pushLearnedContext: pushLearnedContext
   };
 });

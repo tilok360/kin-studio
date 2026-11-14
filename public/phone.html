@@ -11,21 +11,24 @@
 <meta name="apple-mobile-web-app-title" content="Kin Studio">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/__grok/manifest.webmanifest">
-<title>Kin Studio 1.17.0</title>
-<meta name="kin-studio-version" content="1.17.0">
-<meta name="kin-studio-android" content="2.6 (17)">
+<title>Kin Studio 1.18.0</title>
+<meta name="kin-studio-version" content="1.18.0">
+<meta name="kin-studio-android" content="2.7 (18)">
 <script>window.KinKokoro={lastError:"",warmup:async()=>{},speak:async()=>{},interrupt(){}};</script>
-<script>window.KIN_STUDIO={app:"1.17.0",androidName:"2.6",androidCode:17,publicUrl:"https://kin-studio1.grok.me/",apkUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk",exeUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe"};</script>
+<script>window.KIN_STUDIO={app:"1.18.0",androidName:"2.7",androidCode:18,publicUrl:"https://kin-studio1.grok.me/",apkUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk",exeUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe"};</script>
 <script src="/kin-client.js"></script>
 <script>
 /* === KIN_CLIENT_INLINE_START === */
 /* Inline copy of public/kin-client.js so a Grok-builder phone.html replace stays self-contained. */
-/* Kin Studio chat client — 1.16.0.
+/* Kin Studio chat client — 1.18.0.
    Official Kindroid send-message helper: streaming with fallback, 75s timeout,
    rate-limit / auth / offline errors, a send queue, and secret redaction.
    1.16: one shared rate limiter for every Kindroid call (10 per 30 s, auto-wait
    with a countdown), retry/backoff helpers, a connection-status feed, AI ID
    clean-up and bulk-list parsing, live key test and Kin lookup for setup.
+   1.18: "Talk as" persona switching and the Learned context editor. Both use
+   update-info fields Kindroid has NOT documented (found by other API users);
+   they may change or stop working, so every failure is reported plainly.
    Never logs or returns the kn_ API key. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -664,6 +667,171 @@
     return { ok: true, state: "ok", ai_id: id, name: name, greeting: greeting, count: msgs.length, message: msgs.length ? "Found." : "Found (no messages yet)." };
   }
 
+  /* ---------- 1.18: undocumented update-info helpers ----------
+     Kindroid has no GET for Kin fields, so nothing here can read the current
+     persona, learned context or revision back. The app keeps its own copy. */
+
+  /* Gender words as the Kindroid app shows them. A guess: not documented for personas. */
+  var PERSONA_GENDER = { male: "Male", female: "Female", nonbinary: "Non-binary" };
+
+  /* Body for a persona switch. With a Kindroid persona ID it uses active_persona_id (undocumented).
+     Without one it falls back to the documented account-wide user_name / user_gender only. */
+  function personaSwitchBody(ai_id, persona) {
+    persona = persona || {};
+    var body = { ai_id: String(ai_id || "") };
+    var pid = String(persona.kindroidPersonaId || "").replace(INVISIBLE_RE, "").trim();
+    if (persona.name) body.user_name = String(persona.name).slice(0, 100);
+    if (persona.gender && PERSONA_GENDER[persona.gender]) body.user_gender = PERSONA_GENDER[persona.gender];
+    if (pid) {
+      body.active_persona_id = pid;
+      if (persona.backstory) body.user_backstory = String(persona.backstory).slice(0, 1000);
+    }
+    return body;
+  }
+  function personaMode(persona) {
+    return persona && String(persona.kindroidPersonaId || "").trim() ? "persona_id" : "name_only";
+  }
+
+  /* One persona-switched send at a time, so two sends can't interleave their switch / switch-back. */
+  var personaLock = Promise.resolve();
+
+  /* Switch to `persona`, run send(), then switch back to `home` in a finally block.
+     opts: { call(path, body) -> Promise (must go through the shared limiter), ai_id, persona, home,
+             send() -> Promise, onStep(step) }
+     Throws a KindroidError with kind "persona_switch" (nothing was sent) when the switch itself fails.
+     The result has restored:false and restoreError when switching back failed. */
+  function sendAsPersona(opts) {
+    opts = opts || {};
+    var run = personaLock.then(function () { return sendAsPersonaNow(opts); });
+    personaLock = run.then(function () {}, function () {});
+    return run;
+  }
+  async function sendAsPersonaNow(opts) {
+    var call = opts.call;
+    var step = typeof opts.onStep === "function" ? opts.onStep : function () {};
+    if (typeof call !== "function" || typeof opts.send !== "function") {
+      throw KindroidError("error", "sendAsPersona needs call() and send().", { retry: false });
+    }
+    if (!opts.ai_id) throw KindroidError("persona_switch", "Talk as needs a Kin with an AI ID to switch through. Nothing was sent.", { retry: false });
+    if (!opts.home) throw KindroidError("persona_switch", "Pick the persona to switch back to (Personas tab, \"Switch back to this one\") before using Talk as. Nothing was sent.", { retry: false });
+    step("switch");
+    try {
+      await call("/update-info", personaSwitchBody(opts.ai_id, opts.persona));
+    } catch (e) {
+      var st = e && e.status;
+      var why = st === 400 || st === 404 || (e && e.kind === "not_found")
+        ? "Kindroid didn't accept the persona switch (" + (st || "400/404") + "). Persona switching uses a part of Kindroid's API that isn't documented, and it may have changed. Check the Kindroid persona ID on the Personas tab."
+        : redact((e && e.message) || "The persona switch failed.");
+      var pe = KindroidError("persona_switch", why + " Nothing was sent.", { retry: false, status: st });
+      pe.cause = e && e.kind;
+      pe.posted = false;
+      throw pe;
+    }
+    var result, sendErr = null, restored = false, restoreError = "";
+    try {
+      step("send");
+      result = await opts.send();
+    } catch (e) {
+      sendErr = e;
+    } finally {
+      step("restore");
+      try {
+        await call("/update-info", personaSwitchBody(opts.ai_id, opts.home));
+        restored = true;
+      } catch (re) {
+        restoreError = redact((re && re.message) || "switch back failed");
+      }
+      step("done");
+    }
+    if (sendErr) {
+      sendErr.personaRestored = restored;
+      if (!restored) sendErr.personaRestoreError = restoreError;
+      throw sendErr;
+    }
+    return { result: result, restored: restored, restoreError: restoreError };
+  }
+
+  /* Learned context (developed_context). Caps match the Characters tab, which follows the Kindroid app. */
+  var LEARNED_FIELDS = [
+    { key: "self_relationship", local: "growth", label: "Growth & relationship", max: 800 },
+    { key: "durable_facts", local: "importantFacts", label: "Important facts", max: 1200 },
+    { key: "ongoing_context", local: "ongoingThreads", label: "Ongoing threads", max: 800 }
+  ];
+  /* Used only when the user has no revision number. A documented GUESS, not something Kindroid published. */
+  var LEARNED_REVISION_GUESS = 0;
+
+  function parseRevision(v) {
+    if (v == null) return null;
+    var s = String(v).trim();
+    if (!/^\d{1,12}$/.test(s)) return null;
+    return Number(s);
+  }
+  /* Validate and build the update-info body. All three fields and the revision are required by Kindroid. */
+  function learnedContextBody(ai_id, fields, revision) {
+    fields = fields || {};
+    var problems = [];
+    var id = cleanAiId(ai_id);
+    var idp = aiIdProblem(id);
+    if (idp) problems.push(idp === "empty" ? "This Kin needs an AI ID." : idp);
+    var dc = {};
+    LEARNED_FIELDS.forEach(function (f) {
+      var v = fields[f.key] != null ? fields[f.key] : fields[f.local];
+      v = String(v == null ? "" : v).replace(/\r\n/g, "\n");
+      if (v.length > f.max) problems.push(f.label + " is " + v.length + " characters; the limit is " + f.max + ".");
+      dc[f.key] = v;
+    });
+    var rev = parseRevision(revision);
+    if (rev == null) problems.push("Revision must be a whole number.");
+    return { ok: !problems.length, problems: problems, body: { ai_id: id, developed_context: dc, developed_context_revision: rev } };
+  }
+  /* Look for a revision number in a 409 body, in case Kindroid sends the current one back. Unverified. */
+  function revisionFromBody(text) {
+    var s = String(text || "");
+    try {
+      var j = JSON.parse(s);
+      var found = null;
+      (function walk(o, depth) {
+        if (found != null || !o || typeof o !== "object" || depth > 4) return;
+        Object.keys(o).forEach(function (k) {
+          if (found != null) return;
+          if (/revision/i.test(k) && parseRevision(o[k]) != null) found = parseRevision(o[k]);
+          else walk(o[k], depth + 1);
+        });
+      })(j, 0);
+      if (found != null) return found;
+    } catch (_) { /* not JSON; try plain text below */ }
+    var m = s.match(/revision[^0-9]{0,24}(\d{1,12})/i);
+    return m ? Number(m[1]) : null;
+  }
+  /* Push learned context. opts: { call(path, body) (shared limiter), ai_id, fields, revision }
+     Result: { ok, state: "ok" | "invalid" | "conflict" | "bad_request" | "error", message, sentRevision, serverRevision, body } */
+  async function pushLearnedContext(opts) {
+    opts = opts || {};
+    var built = learnedContextBody(opts.ai_id, opts.fields, opts.revision);
+    if (!built.ok) return { ok: false, state: "invalid", message: built.problems.join(" "), body: built.body };
+    try {
+      await opts.call("/update-info", built.body);
+    } catch (e) {
+      var st = e && e.status;
+      var raw = (e && (e.body || e.message)) || "";
+      if (st === 409 || (e && e.kind === "conflict")) {
+        var srv = revisionFromBody(raw);
+        return {
+          ok: false, state: "conflict", sentRevision: built.body.developed_context_revision, serverRevision: srv, body: built.body,
+          message: "Kindroid said the learned context changed since revision " + built.body.developed_context_revision +
+            " (409). Your Kin probably learned something new on its own. Nothing was changed. Open the Kin in the Kindroid app, copy the three Learned context fields again, paste them here, add your edits, and push again" +
+            (srv != null ? " (Kindroid mentioned revision " + srv + ")." : ".")
+        };
+      }
+      if (st === 400) {
+        return { ok: false, state: "bad_request", sentRevision: built.body.developed_context_revision, body: built.body,
+          message: "Kindroid rejected the learned context (400). This part of the API isn't documented and may have changed, or a field is too long. Nothing was changed." };
+      }
+      return { ok: false, state: "error", sentRevision: built.body.developed_context_revision, body: built.body, message: redact((e && e.message) || "Push failed.") };
+    }
+    return { ok: true, state: "ok", sentRevision: built.body.developed_context_revision, body: built.body, message: "Learned context pushed to Kindroid." };
+  }
+
   function ChatQueue(sendFn) {
     this._send = sendFn;
     this._q = [];
@@ -784,7 +952,17 @@
     inspectKin: inspectKin,
     ChatQueue: ChatQueue,
     stripSecretsFromExport: stripSecretsFromExport,
-    looksLikeGenerationFail: looksLikeGenerationFail
+    looksLikeGenerationFail: looksLikeGenerationFail,
+    PERSONA_GENDER: PERSONA_GENDER,
+    personaSwitchBody: personaSwitchBody,
+    personaMode: personaMode,
+    sendAsPersona: sendAsPersona,
+    LEARNED_FIELDS: LEARNED_FIELDS,
+    LEARNED_REVISION_GUESS: LEARNED_REVISION_GUESS,
+    parseRevision: parseRevision,
+    learnedContextBody: learnedContextBody,
+    revisionFromBody: revisionFromBody,
+    pushLearnedContext: pushLearnedContext
   };
 });
 
@@ -1273,6 +1451,19 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
       <label>Example message <span class="lim" id="lim-ex">0/750</span> <button type="button" class="copy-mini" data-ccopy="cExample" data-clabel="Example message">Copy</button></label><textarea id="cExample" maxlength="750" rows="2"></textarea>
       <label>Additional context <span class="lim" id="lim-add">0/2500</span> <button type="button" class="copy-mini" data-ccopy="cAdditional" data-clabel="Additional context">Copy</button></label><textarea id="cAdditional" maxlength="2500" rows="4"></textarea>
     </details>
+    <details class="acc" id="lcBox"><summary>Learned context: push to Kindroid (1.18, experimental)</summary>
+      <p class="hint">Sends <strong>Growth &amp; relationship</strong>, <strong>Important facts</strong> and <strong>Ongoing threads</strong> (the three fields above) to this Kin's Learned context. Kindroid hasn't documented this, so it may stop working.</p>
+      <p class="hint"><strong>Kindroid replaces all three fields with what's here.</strong> It can't send its current text back to apps, so first copy all three fields from the Kin in the Kindroid app and paste them above, then make your edits. A blank field here clears it in Kindroid.</p>
+      <label>Revision number <input id="cLcRev" inputmode="numeric" placeholder="blank = try 0 (a guess)" style="max-width:220px"></label>
+      <p class="hint" id="lcRevHint">Kindroid counts every change to Learned context, including lines your Kin learns on its own. If the number here is out of date, Kindroid refuses with "Learned context changed while you were editing it" and nothing changes. The Kindroid app doesn't show this number. If you don't know it, leave it blank. Kin Studio then tries 0, which is a guess.</p>
+      <div class="row">
+        <button type="button" class="btn" id="btnPushLearned">Push learned context</button>
+        <button type="button" class="btn secondary" id="btnLcUseRev" hidden>Use Kindroid's revision</button>
+      </div>
+      <p class="status" id="lcStatus" role="status" aria-live="polite"></p>
+      <div class="section" style="margin-top:8px">Pushed before (kept on this device)</div>
+      <div id="lcHistory"><p class="hint">Nothing pushed yet.</p></div>
+    </details>
     <div class="row" style="margin-top:10px">
       <button type="button" class="btn ok" id="btnSaveCharBottom">Save character</button>
     </div>
@@ -1282,7 +1473,11 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
 
 <section id="p-persona" class="panel">
   <div class="card">
-    <p class="hint">User personas for this phone. Each field has Copy. Not pushed to Kindroid.</p>
+    <p class="hint">Your personas. Each field has Copy. They're saved on this device. Kin Studio only sends one to Kindroid when you use <strong>Talk as</strong> in Chat or Groups.</p>
+    <div class="banner-warn" id="personaRestoreWarn" hidden style="border:1px solid #d9a400;border-radius:8px;padding:8px;margin:8px 0">
+      <span id="personaRestoreText"></span>
+      <div class="row" style="margin-top:6px"><button type="button" class="btn" id="btnPersonaRestore">Switch back now</button></div>
+    </div>
     <div class="row">
       <button type="button" class="btn secondary" id="btnImportPersona">Import JSON</button>
       <button type="button" class="btn secondary" id="btnExportPersona">Export this</button>
@@ -1316,6 +1511,12 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
     <textarea id="peAppearance" maxlength="800" rows="3" placeholder="Appearance"></textarea>
     <label>Face detail <span class="lim" id="lim-peFace">0/200</span> <button type="button" class="copy-mini" data-ccopy="peFace" data-clabel="Face detail">Copy</button></label>
     <textarea id="peFace" maxlength="200" rows="2" placeholder="Face detail"></textarea>
+    <details class="acc"><summary>Talk as (Kindroid persona switching, experimental)</summary>
+      <label>Kindroid persona ID <button type="button" class="copy-mini" data-ccopy="peKindroidId" data-clabel="Kindroid persona ID">Copy</button></label>
+      <input id="peKindroidId" placeholder="optional: the persona's ID in Kindroid">
+      <p class="hint">With an ID, Talk as switches your whole Kindroid persona to this one. Without an ID, it only changes the name and gender your Kins see. If a chat has a persona attached in Kindroid, that persona wins and nothing changes. The Kindroid app doesn't show persona IDs, so you'd have to find it in the web app's network traffic.</p>
+      <label><input type="checkbox" id="peIsHome"> Switch back to this one after Talk as (your usual persona)</label>
+    </details>
     <div class="row" style="margin-top:10px">
       <button type="button" class="btn ok" id="btnSavePersonaBottom">Save persona</button>
     </div>
@@ -1343,6 +1544,11 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
       <button type="button" class="btn secondary" id="btnChatRetry"><span class="ico">↺</span>Retry</button>
       <button type="button" class="btn secondary" id="btnChatBreak"><span class="ico">⏸</span>Break</button>
       <button type="button" class="btn danger" id="btnChatWipe"><span class="ico">⌫</span>Wipe</button>
+    </div>
+    <div class="talkas-row" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0">
+      <label class="hint" for="chatTalkAs" style="margin:0">Talk as</label>
+      <select id="chatTalkAs" style="max-width:240px"><option value="">Kindroid's current persona</option></select>
+      <span class="hint" id="chatTalkAsHint" hidden>Switches your persona everywhere in Kindroid while it sends, then switches back.</span>
     </div>
     <div class="empty-card" id="chatEmpty" hidden><p class="hint" id="chatEmptyText" style="margin:0 0 8px"></p><button type="button" class="btn" id="btnEmptySetup">Set up Kin Studio</button></div>
     <div class="chat-log" id="chatLog"></div>
@@ -1381,6 +1587,9 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
     <select id="gManualKin" style="display:none"></select>
     <label>Max AI replies (auto)</label><input id="gMax" type="number" min="1" max="20" value="3">
     <label><input type="checkbox" id="gSpeak" checked> Auto-voice</label>
+    <label>Talk as</label>
+    <select id="gTalkAs"><option value="">Kindroid's current persona</option></select>
+    <p class="hint" id="gTalkAsHint" hidden>Switches your persona everywhere in Kindroid while your message posts, then switches back.</p>
     <label>Message</label>
     <textarea id="gMsg" rows="2" placeholder="Message. Enter to send, Shift+Enter for a new line"></textarea>
     <div class="chat-tools" style="margin-bottom:8px">
@@ -1462,7 +1671,7 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
     </p>
     <div class="section">Kokoro</div>
     <p class="hint">Voices tab → pick a named English model → Test. First play loads the on-device model. Stop or Send cuts speech.</p>
-    <p class="ver-foot" id="verFoot">Kin Studio 1.17.0 · Android 2.6 (versionCode 17)</p>
+    <p class="ver-foot" id="verFoot">Kin Studio 1.18.0 · Android 2.7 (versionCode 18)</p>
   </div>
 </section>
 
@@ -1496,7 +1705,7 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
     <p class="hint">The <strong>● Kindroid</strong> badge at the top shows the connection. If it says waiting, Kindroid's limit of 10 requests every 30 seconds was reached and the app is counting down. Tap it for <strong>Fix my connection</strong>.</p>
     <p class="hint"><strong>Send to iPhone</strong> — tap iPhone → Send to someone. They open the link in Safari → Share → Add to Home Screen. Each person uses their own kn_ key. Do not send your key.</p>
     <p class="hint"><strong>iPhone install</strong> — open <a href="https://kin-studio1.grok.me/">https://kin-studio1.grok.me/</a> in Safari (not Chrome). Share → Add to Home Screen. Same studio, full screen. Apple does not allow an unsigned iPhone app file like the Android APK. (The old kin-studio.grok.me address is retired.)</p>
-    <p class="hint"><strong>Android</strong> — tap Android to get the latest APK from GitHub (<code>releases/latest/download/Kin-Studio.apk</code>). If you already installed 1.14.1 or 1.15.0 (the new signing key), 1.16.0 installs over it — do not uninstall. If you are still on an APK from before 1.14.1, export your characters first, then uninstall and install. This build is versionCode 16 / versionName 2.5.</p>
+    <p class="hint"><strong>Android</strong> — tap Android to get the latest APK from GitHub (<code>releases/latest/download/Kin-Studio.apk</code>). If you already installed 1.14.1 or newer (the new signing key), 1.18.0 installs over it — do not uninstall. If you are still on an APK from before 1.14.1, export your characters first, then uninstall and install. This build is versionCode 18 / versionName 2.7.</p>
     <p class="hint"><strong>Windows</strong> — tap Windows and open <strong>Kin-Studio.exe</strong>. It is its own window. Not a Chrome tab. Not Edge.</p>
     <p class="hint"><strong>Guide</strong> — this page<br>
     <p class="hint"><strong>Chat</strong> — 1:1 send, listen, rewind. History loads the old thread so Replay works on past lines. Import the Kindroid chat-exporter JSON if you already downloaded it.<br>
@@ -2449,7 +2658,9 @@ function readPersonaForm(){
     backstory: ($('peBackstory')&&$('peBackstory').value)||'',
     avatarStyle: ($('peAvatarStyle')&&$('peAvatarStyle').value)||'photoreal',
     appearance: ($('peAppearance')&&$('peAppearance').value)||'',
-    face: ($('peFace')&&$('peFace').value)||''
+    face: ($('peFace')&&$('peFace').value)||'',
+    kindroidPersonaId: (($('peKindroidId')&&$('peKindroidId').value)||'').trim(),
+    isHome: !!($('peIsHome')&&$('peIsHome').checked)
   };
 }
 function loadPersonaForm(p){
@@ -2462,14 +2673,18 @@ function loadPersonaForm(p){
   if($('peAvatarStyle')) $('peAvatarStyle').value=p.avatarStyle==='anime'?'anime':'photoreal';
   if($('peAppearance')) $('peAppearance').value=p.appearance||'';
   if($('peFace')) $('peFace').value=p.face||'';
+  if($('peKindroidId')) $('peKindroidId').value=p.kindroidPersonaId||'';
+  if($('peIsHome')) $('peIsHome').checked=!!p.isHome;
   paintPersonaLimits();
 }
 function savePersonaObj(p){
-  const list=personas();
+  let list=personas();
+  if(p.isHome) list=list.map(x=>x.id===p.id?x:Object.assign({},x,{isHome:false}));
   const ix=list.findIndex(x=>x.id===p.id);
   if(ix>=0) list[ix]=p; else list.push(p);
   savePersonas(list);
   renderPersonas();
+  try{ refreshTalkAs(); }catch(_){}
 }
 function doSavePersona(){
   if(!($('peName') && $('peName').value.trim())){
@@ -2488,7 +2703,7 @@ function renderPersonas(){
     const style=p.avatarStyle==='anime'?'Anime':'Photoreal';
     const g=p.gender==='female'?'Female':(p.gender==='nonbinary'?'Nonbinary':'Male');
     return `<div class="list-item"><strong>${esc(p.name)}</strong>
-      <div class="hint">${esc(p.label||'no label')} · ${g} · ${style}</div>
+      <div class="hint">${esc(p.label||'no label')} · ${g} · ${style}${p.isHome?' · switch-back persona':''}${p.kindroidPersonaId?' · has Kindroid ID':''}</div>
       <div class="row" style="margin-top:6px">
         <button type="button" class="btn secondary" data-pe="${p.id}">Edit</button>
         <button type="button" class="btn danger" data-pd="${p.id}">Del</button>
@@ -2502,6 +2717,7 @@ function renderPersonas(){
     if(!confirm('Delete this persona?')) return;
     savePersonas(personas().filter(x=>x.id!==b.dataset.pd));
     renderPersonas();
+    try{ refreshTalkAs(); }catch(_){}
     if($('peStatus')) $('peStatus').textContent='Deleted.';
   });
 }
@@ -2510,7 +2726,7 @@ function bindPersonaUi(){
   if($('btnSavePersona')) $('btnSavePersona').onclick=doSavePersona;
   if($('btnSavePersonaBottom')) $('btnSavePersonaBottom').onclick=doSavePersona;
   if($('btnNewPersona')) $('btnNewPersona').onclick=function(){
-    loadPersonaForm({ id:'', name:'', label:'', gender:'male', backstory:'', avatarStyle:'photoreal', appearance:'', face:'' });
+    loadPersonaForm({ id:'', name:'', label:'', gender:'male', backstory:'', avatarStyle:'photoreal', appearance:'', face:'', kindroidPersonaId:'', isHome:false });
     if($('peStatus')) $('peStatus').textContent='';
   };
   if($('btnExportPersona')) $('btnExportPersona').onclick=function(){
@@ -2545,7 +2761,9 @@ function bindPersonaUi(){
           backstory: row.backstory||'',
           avatarStyle: row.avatarStyle==='anime'?'anime':'photoreal',
           appearance: row.appearance||'',
-          face: row.face||row.faceDetail||''
+          face: row.face||row.faceDetail||'',
+          kindroidPersonaId: String(row.kindroidPersonaId||'').trim(),
+          isHome: !!row.isHome
         };
         savePersonaObj(p);
         loadPersonaForm(p);
@@ -2647,6 +2865,7 @@ function loadCharForm(c){
   if($('cAvatar')) $('cAvatar').value=c.avatar||'';
   if(typeof paintCharPhoto==='function') paintCharPhoto();
   bindCharLimits();
+  try{ if(typeof lcPaint==='function') lcPaint(); if($('lcStatus')) $('lcStatus').textContent=''; }catch(_){}
 }
 
 function mapRawToChar(raw, voiceId){
@@ -2834,6 +3053,7 @@ function kinHttpError(status, text, path){
   var hist = /get-chat-messages/.test(String(path||''));
   if(window.KinClient && KinClient.classifyKindroidError){
     var e = KinClient.classifyKindroidError(new Error(status+': '+safe), { status:status });
+    e.body = kinRedact(String(text||'')).slice(0,400);
     if(status===429 && hist && pullsToday()>=PULL_DAY_CAP-5){
       e.message = 'Kindroid daily history limit (600 pulls per 24 hours). Saved thread is kept.';
       e.kind = 'daily_cap';
@@ -3930,6 +4150,7 @@ async function runChatJob(job){
       kinPaintWait(sec);
       $('chatStatus').textContent = sec>0 ? 'Kindroid allows 10 messages every 30 seconds — sending in '+sec+' s…' : (skip?'Continuing…':'Waiting…');
     };
+    var sendOnce=async function(){
     var gate=(window.KinClient && KinClient.limiter) || getChatRate();
     if(gate && gate.acquire){
       await gate.acquire(chatWait);
@@ -3983,6 +4204,32 @@ async function runChatJob(job){
       }
       posted=!!(result && result.posted);
       reply=(result && result.text) || reply || '';
+    }
+    };
+    var talk=(!skip && job.talkAs) ? talkAsPair(job.talkAs) : null;
+    if(talk && talk.error){
+      var te=window.KinClient ? KinClient.KindroidError('persona_switch', talk.error, { retry:false }) : new Error(talk.error);
+      te.posted=false; throw te;
+    }
+    if(talk){
+      try{
+        var wrapped=await KinClient.sendAsPersona({
+          call:function(path, body){ return kinRaw('POST', path, body, { onWait:chatWait }); },
+          ai_id:c.ai_id, persona:talk.persona, home:talk.home, send:sendOnce,
+          onStep:function(st){ if(st==='switch') $('chatStatus').textContent='Switching to '+talk.persona.name+'…'; else if(st==='restore') $('chatStatus').textContent='Switching back to '+talk.home.name+'…'; }
+        });
+        personaRestoreResult(wrapped.restored, talk, c.ai_id, wrapped.restoreError);
+      }catch(pe){
+        if(pe && pe.kind==='persona_switch' && !pe.posted){
+          if(window.confirm(pe.message+'\n\nSend it as your current Kindroid persona instead?')) await sendOnce();
+          else throw pe;
+        } else {
+          if(pe && pe.personaRestored===false) personaRestoreResult(false, talk, c.ai_id, pe.personaRestoreError);
+          throw pe;
+        }
+      }
+    } else {
+      await sendOnce();
     }
     if(window.KinClient && KinClient.looksLikeGenerationFail && KinClient.looksLikeGenerationFail(reply)){
       var ge=KinClient.KindroidError('generation','Kindroid could not generate a reply this time ("< >"). Wait a moment, then tap Send again.',{ retry:true });
@@ -4054,6 +4301,8 @@ async function doChat(speak, skip, opts){
   if(speak==null) speak=auto;
   const message=skip ? '' : (opts.message!=null ? String(opts.message) : $('chatMsg').value.trim());
   if(!skip && !message) return;
+  var talkAsId=skip ? '' : (opts.talkAs!=null ? opts.talkAs : talkAsSelected('chat'));
+  if(talkAsId && !talkAsWarnOk()) return;
   stopSpeaking();
   store.set('lastChatChar', c.id);
   var q=getChatQueue();
@@ -4071,7 +4320,7 @@ async function doChat(speak, skip, opts){
   } else {
     $('chatStatus').textContent=skip?'Continuing…':'Waiting…';
   }
-  var job={ message:message, skip:!!skip, speak:speak, charId:c.id, resend:!!opts.resend, char:c };
+  var job={ message:message, skip:!!skip, speak:speak, charId:c.id, resend:!!opts.resend, char:c, talkAs:talkAsId };
   try{
     if(!q){
       await runChatJob(job);
@@ -4351,6 +4600,7 @@ async function doGroup(skip){
   const group_id=$('gId').value.trim(); const message=skip ? '' : $('gMsg').value.trim();
   if(!group_id){ $('gStatus').innerHTML='<span class="error">Need Group ID.</span>'; return; }
   if(!skip && !message) return;
+  if(!skip && talkAsSelected('group') && !talkAsWarnOk()) return;
   stopSpeaking();
   store.set('group',{id:group_id}); groupAbort=false; $('btnGroupSend').disabled=true;
   if($('btnGroupContinue')) $('btnGroupContinue').disabled=true;
@@ -4365,7 +4615,29 @@ async function doGroup(skip){
     try{ (await fetchGroupMessages(group_id)).forEach(function(m){ seen.add(groupMsgKey(m)); }); }catch(_){}
     let pending='';
     if(!skip){
-      const posted=extractKindroidText(await apiPost('/groupchats-user-message',{ group_id, message }));
+      const gTalk=talkAsSelected('group');
+      const postUser=async function(){ return extractKindroidText(await apiPost('/groupchats-user-message',{ group_id, message })); };
+      let posted='';
+      if(gTalk){
+        const pair=talkAsPair(gTalk);
+        const via=groupSwitchAiId();
+        if(pair.error) throw new Error(pair.error);
+        if(!via) throw new Error('Talk as needs at least one character with a Kindroid AI ID to switch through. Nothing was sent.');
+        try{
+          const w=await KinClient.sendAsPersona({
+            call:function(path, body){ return kinRaw('POST', path, body); },
+            ai_id:via, persona:pair.persona, home:pair.home, send:postUser,
+            onStep:function(st){ if(st==='switch') $('gStatus').textContent='Switching to '+pair.persona.name+'…'; else if(st==='restore') $('gStatus').textContent='Switching back to '+pair.home.name+'…'; }
+          });
+          posted=w.result||'';
+          personaRestoreResult(w.restored, pair, via, w.restoreError);
+        }catch(pe){
+          if(pe && pe.kind==='persona_switch' && !pe.posted && window.confirm(pe.message+'\n\nPost it as your current Kindroid persona instead?')) posted=await postUser();
+          else { if(pe && pe.personaRestored===false) personaRestoreResult(false, pair, via, pe.personaRestoreError); throw pe; }
+        }
+      } else {
+        posted=await postUser();
+      }
       pending=(posted && posted!==message && !isKindroidAck(posted)) ? posted : '';
     }
     const mode=$('gMode').value, max=Math.min(20,Math.max(1,Number($('gMax').value)||8));
@@ -4871,7 +5143,7 @@ function collectBackup(){
   });
   var payload={
     format:'kin-studio-backup-v1',
-    app:'Kin Studio 1.17.0',
+    app:'Kin Studio 1.18.0',
     exportedAt:new Date().toISOString(),
     characters:chars(),
     personas:personas(),
@@ -5085,6 +5357,182 @@ if($('btnChatWipe')) $('btnChatWipe').onclick=async function(){
     $('chatStatus').textContent='Memory wipe + new greeting sent.';
   }catch(e){ $('chatStatus').innerHTML='<span class="error">'+esc(e.message)+'</span>'; }
 };
+
+/* ---------- 1.18: Talk as (persona switching) ----------
+   Uses update-info's undocumented active_persona_id. Account-wide while it runs. */
+function homePersona(){ return personas().find(p=>p.isHome)||null; }
+function talkAsKey(kind){
+  if(kind==='group'){ const g=(($('gId')&&$('gId').value)||'').trim(); return g?('talkAs_g_'+g):''; }
+  const id=$('chatChar')&&$('chatChar').value; return id?('talkAs_c_'+id):'';
+}
+function talkAsSelected(kind){
+  const sel=$(kind==='group'?'gTalkAs':'chatTalkAs');
+  const v=sel?sel.value:'';
+  if(!v) return '';
+  return personas().some(p=>p.id===v)?v:'';
+}
+function talkAsPair(personaId){
+  const persona=personas().find(p=>p.id===personaId);
+  const home=homePersona();
+  if(!persona) return { error:'That persona was deleted. Pick another one under Talk as. Nothing was sent.' };
+  if(!home) return { error:'Before using Talk as, open the Personas tab, pick your usual persona and tick "Switch back to this one". Kindroid can\'t tell apps which persona you normally use. Nothing was sent.' };
+  if(home.id===persona.id) return { error:persona.name+' is already your switch-back persona. Pick "Kindroid\'s current persona" instead. Nothing was sent.' };
+  return { persona:persona, home:home };
+}
+function talkAsWarnOk(){
+  if(store.get('talkAsWarned', false)) return true;
+  const ok=window.confirm('Talk as changes your persona everywhere in your Kindroid account while the message sends, including the Kindroid app. Then Kin Studio switches back to your usual persona.\n\nIf you chat in the Kindroid app at the same moment, that message could go out as the wrong persona. This uses a part of Kindroid\'s API that isn\'t documented, so it may stop working.\n\nEach message sent this way uses 3 of Kindroid\'s 10 requests per 30 seconds.\n\nContinue?');
+  if(ok) store.set('talkAsWarned', true);
+  return ok;
+}
+function groupSwitchAiId(){
+  const manual=$('gManualKin')&&$('gManualKin').value;
+  if(manual) return manual;
+  const c=chars().find(x=>x.ai_id);
+  return c?c.ai_id:'';
+}
+function personaRestoreResult(ok, pair, ai_id, err){
+  if(ok){ store.set('personaRestorePending', null); paintPersonaRestore(); return; }
+  store.set('personaRestorePending', { ai_id:ai_id, homeId:pair.home.id, homeName:pair.home.name, usedName:pair.persona.name, at:Date.now(), error:String(err||'').slice(0,160) });
+  paintPersonaRestore();
+  const msg='Couldn\'t switch your persona back to '+pair.home.name+'. Kindroid may still be using '+pair.persona.name+' everywhere. Open the Personas tab and tap "Switch back now", or pick your persona in the Kindroid app.';
+  try{ if(window.liveToast) liveToast(msg); }catch(_){}
+  try{ if($('chatStatus')) $('chatStatus').innerHTML='<span class="error">'+esc(msg)+'</span>'; }catch(_){}
+}
+function paintPersonaRestore(){
+  const box=$('personaRestoreWarn'); if(!box) return;
+  const p=store.get('personaRestorePending', null);
+  box.hidden=!p;
+  if(p && $('personaRestoreText')) $('personaRestoreText').textContent='The last Talk as message couldn\'t switch your persona back to '+(p.homeName||'your usual persona')+'. Kindroid may still be using '+(p.usedName||'another persona')+'.';
+}
+async function personaRestoreNow(){
+  const p=store.get('personaRestorePending', null);
+  const home=homePersona();
+  if(!home){ if($('peStatus')) $('peStatus').innerHTML='<span class="error">Tick "Switch back to this one" on your usual persona first.</span>'; return; }
+  const ai=(p&&p.ai_id)||((chars().find(x=>x.ai_id)||{}).ai_id)||'';
+  if(!ai){ if($('peStatus')) $('peStatus').innerHTML='<span class="error">Need a character with a Kindroid AI ID.</span>'; return; }
+  try{
+    if($('peStatus')) $('peStatus').textContent='Switching back to '+home.name+'…';
+    await kinRaw('POST','/update-info', KinClient.personaSwitchBody(ai, home));
+    store.set('personaRestorePending', null); paintPersonaRestore();
+    if($('peStatus')) $('peStatus').textContent='Switched back to '+home.name+'.';
+  }catch(e){ if($('peStatus')) $('peStatus').innerHTML='<span class="error">'+esc(kinRedact(e.message||e))+'</span>'; }
+}
+function refreshTalkAs(){
+  const list=personas();
+  const home=homePersona();
+  [['chatTalkAs','chat','chatTalkAsHint'],['gTalkAs','group','gTalkAsHint']].forEach(function(t){
+    const sel=$(t[0]); if(!sel) return;
+    const key=talkAsKey(t[1]);
+    const want=key?store.get(key,''):'';
+    sel.innerHTML='<option value="">Kindroid\'s current persona</option>'+list.filter(p=>!home||p.id!==home.id).map(p=>`<option value="${esc(p.id)}">${esc(p.name)}${p.kindroidPersonaId?'':' (name only)'}</option>`).join('');
+    sel.value=list.some(p=>p.id===want)?want:'';
+    if($(t[2])) $(t[2]).hidden=!sel.value;
+  });
+}
+function bindTalkAs(){
+  [['chatTalkAs','chat','chatTalkAsHint'],['gTalkAs','group','gTalkAsHint']].forEach(function(t){
+    const sel=$(t[0]); if(!sel) return;
+    sel.addEventListener('change', function(){
+      const key=talkAsKey(t[1]); if(key) store.set(key, sel.value||'');
+      if($(t[2])) $(t[2]).hidden=!sel.value;
+    });
+  });
+  if($('chatChar')) $('chatChar').addEventListener('change', refreshTalkAs);
+  if($('gId')) $('gId').addEventListener('change', refreshTalkAs);
+  if($('btnLoadGroup')) $('btnLoadGroup').addEventListener('click', function(){ setTimeout(refreshTalkAs, 0); });
+  if($('btnPersonaRestore')) $('btnPersonaRestore').onclick=personaRestoreNow;
+  refreshTalkAs(); paintPersonaRestore();
+}
+
+/* ---------- 1.18: Learned context editor ----------
+   update-info developed_context (undocumented). No GET exists, so the app keeps
+   what it pushed and the user pastes Kindroid's current text before editing. */
+const LC_HIST_MAX=15;
+function lcCharId(){ return ($('cId')&&$('cId').value)||''; }
+function lcMeta(id){ return store.get('lcMeta_'+id, {}) || {}; }
+function lcHist(id){ return store.get('lcHist_'+id, []) || []; }
+function lcFieldsFromForm(){
+  return { growth:($('cGrowth')&&$('cGrowth').value)||'', importantFacts:($('cFacts')&&$('cFacts').value)||'', ongoingThreads:($('cThreads')&&$('cThreads').value)||'' };
+}
+function lcPaint(){
+  const id=lcCharId();
+  if($('cLcRev')) $('cLcRev').value=id?(lcMeta(id).revision||''):'';
+  if($('btnLcUseRev')) $('btnLcUseRev').hidden=true;
+  const el=$('lcHistory'); if(!el) return;
+  const h=id?lcHist(id):[];
+  el.innerHTML=h.length?h.map(function(r,i){
+    const when=new Date(r.at).toLocaleString();
+    const tag=r.state==='ok'?'Pushed':(r.state==='conflict'?'Refused (409, out of date)':'Failed');
+    return `<div class="list-item"><strong>${esc(tag)}</strong> · ${esc(when)} · revision ${esc(String(r.revision))}
+      <div class="hint">${esc((r.fields.growth||'').slice(0,80))}${(r.fields.growth||'').length>80?'…':''}</div>
+      <div class="row" style="margin-top:6px"><button type="button" class="btn secondary" data-lcr="${i}">Put back in the fields</button></div></div>`;
+  }).join(''):'<p class="hint">Nothing pushed yet.</p>';
+  el.querySelectorAll('[data-lcr]').forEach(function(b){ b.onclick=function(){
+    const r=lcHist(lcCharId())[Number(b.dataset.lcr)]; if(!r) return;
+    if(!confirm('Replace the three Learned context fields above with this saved copy? (Nothing is sent to Kindroid until you push.)')) return;
+    if($('cGrowth')) $('cGrowth').value=r.fields.growth||'';
+    if($('cFacts')) $('cFacts').value=r.fields.importantFacts||'';
+    if($('cThreads')) $('cThreads').value=r.fields.ongoingThreads||'';
+    try{ scheduleCharSave(); }catch(_){}
+    if($('lcStatus')) $('lcStatus').textContent='Copied back into the fields. Push when ready.';
+  }; });
+}
+function lcRecord(id, fields, revision, state){
+  const h=lcHist(id);
+  h.unshift({ at:Date.now(), revision:revision, state:state, fields:fields });
+  store.set('lcHist_'+id, h.slice(0, LC_HIST_MAX));
+}
+async function pushLearnedNow(){
+  const st=$('lcStatus');
+  if(!keyLooksGood(readApiKey())){ st.innerHTML='<span class="error">Paste the kn_ key in Settings first.</span>'; return; }
+  const c=doSaveChar(true);
+  if(!c){ st.innerHTML='<span class="error">Save the character first.</span>'; return; }
+  if(!c.ai_id){ st.innerHTML='<span class="error">This character needs a Kindroid AI ID.</span>'; return; }
+  let revRaw=(($('cLcRev')&&$('cLcRev').value)||'').trim();
+  let guessed=false;
+  if(!revRaw){
+    if(!confirm('No revision number. Kin Studio will try '+KinClient.LEARNED_REVISION_GUESS+'. That\'s a guess, because Kindroid doesn\'t publish it. If it\'s wrong, Kindroid refuses and nothing changes.\n\nTry it?')) return;
+    revRaw=String(KinClient.LEARNED_REVISION_GUESS); guessed=true;
+  }
+  const fields=lcFieldsFromForm();
+  if(!confirm('Replace '+c.name+'\'s Learned context in Kindroid with these three fields?\n\nKindroid can\'t send its current text back, so anything there that isn\'t pasted here will be lost. A backup of what you send is kept on this device.')) return;
+  st.textContent='Pushing learned context…';
+  const r=await KinClient.pushLearnedContext({
+    call:function(path, body){ return kinRaw('POST', path, body, { onWait:function(sec){ if(sec>0) st.textContent='Waiting for Kindroid\'s limit: '+sec+' s…'; } }); },
+    ai_id:c.ai_id, fields:fields, revision:revRaw
+  });
+  if(r.state==='invalid'){ st.innerHTML='<span class="error">'+esc(r.message)+'</span>'; return; }
+  lcRecord(c.id, fields, r.sentRevision, r.state);
+  const meta=lcMeta(c.id);
+  if(r.ok){
+    meta.revision=String(r.sentRevision); meta.lastPushedAt=Date.now(); meta.guessed=guessed;
+    store.set('lcMeta_'+c.id, meta);
+    lcPaint();
+    st.textContent=r.message+(guessed?' (Revision '+r.sentRevision+' worked.)':'')+' If the Kin learns something new, the next push may be refused until you copy the fields again.';
+    return;
+  }
+  lcPaint();
+  st.innerHTML='<span class="error">'+esc(r.message)+'</span>';
+  if(r.state==='conflict' && r.serverRevision!=null && $('btnLcUseRev')){
+    const b=$('btnLcUseRev'); b.hidden=false; b.textContent='Use revision '+r.serverRevision;
+    b.onclick=function(){
+      if(!confirm('Did you paste the Kin\'s current Learned context from the Kindroid app first? Pushing with the new revision replaces whatever the Kin just learned.')) return;
+      $('cLcRev').value=String(r.serverRevision); b.hidden=true;
+      st.textContent='Revision set to '+r.serverRevision+'. Push again when the fields match Kindroid.';
+    };
+  }
+}
+function bindLearnedContext(){
+  if($('btnPushLearned')) $('btnPushLearned').onclick=function(){ pushLearnedNow().catch(function(e){ if($('lcStatus')) $('lcStatus').innerHTML='<span class="error">'+esc(kinRedact(e.message||e))+'</span>'; }); };
+  if($('cLcRev')) $('cLcRev').addEventListener('change', function(){
+    const id=lcCharId(); if(!id) return;
+    const v=$('cLcRev').value.trim();
+    if(v && !(window.KinClient && KinClient.parseRevision(v)!=null)){ if($('lcStatus')) $('lcStatus').innerHTML='<span class="error">Revision is a whole number.</span>'; return; }
+    const m=lcMeta(id); m.revision=v; m.guessed=false; store.set('lcMeta_'+id, m);
+  });
+  if($('lcBox')) $('lcBox').addEventListener('toggle', function(){ lcPaint(); try{ const prev=$('lcBox').previousElementSibling; if($('lcBox').open && prev && prev.tagName==='DETAILS') prev.open=true; }catch(_){} });
+}
 if($('btnPushKin')) $('btnPushKin').onclick=async function(){
   const c=charFromForm();
   if(!c.ai_id){ $('cStatus').innerHTML='<span class="error">Need Kindroid AI ID.</span>'; return; }
@@ -5120,6 +5568,8 @@ try{ bindSliders(); }catch(_){}
 try{ wireLivePreview(); }catch(_){}
 try{ bindCharLimits(); }catch(_){}
 try{ bindPersonaUi(); }catch(_){}
+try{ bindTalkAs(); }catch(_){}
+try{ bindLearnedContext(); }catch(_){}
 try{ loadSettings(); }catch(_){}
 try{ bindReliabilityUi(); }catch(_){}
 try{ setupListenLive(); }catch(_){}
