@@ -1,4 +1,4 @@
-/* Kin Studio 1.17 Stream mode — core logic (no DOM, no network).
+/* Kin Studio 1.17/1.18 Stream mode — core logic (no DOM, no network).
    Twitch IRC + Joystick.tv gateway parsing, filters, cooldowns, SFW gating,
    co-host batching/pacing, and the CohostEngine that ties them together.
    Network, TTS and the overlay are injected so this file is fully testable.
@@ -9,7 +9,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  var VERSION = "1.17.0";
+  var VERSION = "1.18.0";
   var TWITCH_CHAT_MAX = 500;
   var JOYSTICK_CHAT_MAX = 500;
   var KIN_MESSAGE_MAX = 1800;
@@ -68,7 +68,14 @@
     twitch_channel: "",
     twitch_client_id: "", // public Client ID from dev.twitch.tv (not a secret)
     joystick_enabled: false,
-    joystick_client_id: "" // public Client ID of Chris's Joystick bot (not a secret)
+    joystick_client_id: "", // public Client ID of Chris's Joystick bot (not a secret)
+    // 1.18 stream awareness (no extra Kindroid calls: it rides along with replies)
+    twitch_info: true, // read the stream title, game and live/offline from Twitch
+    info_poll_min: 3, // how often to re-read them (minutes)
+    obs_enabled: false, // read the current OBS scene (obs-websocket, OBS 28+)
+    obs_url: "ws://localhost:4455",
+    scene_react: false, // one short line on BRB / Starting soon / Ending / back
+    scene_gap_sec: 120
   };
 
   function clampNum(v, lo, hi, d) {
@@ -107,7 +114,88 @@
     // Joystick.tv is not in 1.17 (coming later). It stays off unless a Joystick Client ID was entered.
     if (!o.joystick_client_id) o.joystick_enabled = false;
     o.game_context = String(o.game_context || "").slice(0, 400);
+    o.info_poll_min = clampNum(o.info_poll_min, 2, 10, 3);
+    o.scene_gap_sec = clampNum(o.scene_gap_sec, 30, 3600, 120);
+    o.obs_url = cleanObsUrl(o.obs_url);
     return o;
+  }
+
+  /* OBS websocket address: ws:// or wss:// plus a host and optional port, nothing else. */
+  function cleanObsUrl(u) {
+    u = String(u || "").trim();
+    if (/^[A-Za-z0-9.-]+(:\d{1,5})?$/.test(u)) u = "ws://" + u;
+    var m = /^(wss?):\/\/([A-Za-z0-9.-]+|\[[0-9a-fA-F:]+\])(:\d{1,5})?\/?$/.exec(u);
+    if (!m) return "ws://localhost:4455";
+    return m[1] + "://" + m[2] + (m[3] || (m[1] === "ws" ? ":4455" : ""));
+  }
+
+  /* ---------- stream awareness (1.18) ---------- */
+  function cleanInfo(v, max) {
+    v = String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/[\[\]{}<>]/g, "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
+    if (v.length > max) v = v.slice(0, max - 1).trim() + "…";
+    return v;
+  }
+  /* What a scene name means. "" = a normal scene (gameplay, chatting, …). */
+  function sceneKind(name) {
+    var n = " " + String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ") + " ";
+    if (/ (brb|be right back|right back|break|away|afk|intermission|pause) /.test(n)) return "brb";
+    if (/ (starting|start soon|starting soon|pre ?show|countdown|intro) /.test(n)) return "starting";
+    if (/ (ending|end|outro|goodbye|bye|thanks for watching|offline|stream over) /.test(n)) return "ending";
+    return "";
+  }
+  /* Helix GET /channels and GET /streams -> plain info. */
+  function parseHelixChannel(j) {
+    var d = j && j.data && j.data[0];
+    if (!d) return null;
+    return { title: String(d.title || ""), game: String(d.game_name || "") };
+  }
+  function parseHelixStream(j) {
+    if (!j || !Array.isArray(j.data)) return null;
+    var d = j.data[0];
+    return d && d.type === "live" ? { live: true, viewers: Number(d.viewer_count) || 0 } : { live: false, viewers: 0 };
+  }
+  /* obs-websocket v5 auth: secret = b64(sha256(password + salt)); auth = b64(sha256(secret + challenge)).
+     sha256b64(text) -> Promise<base64 string> is injected (WebCrypto in the app, node:crypto in tests). */
+  function obsAuth(password, salt, challenge, sha256b64) {
+    return Promise.resolve(sha256b64(String(password) + String(salt))).then(function (secret) { return sha256b64(secret + String(challenge)); });
+  }
+  var OBS_EVENTS_SCENES = 1 << 2;
+  /* Hello (op 0) -> Identify (op 1) frame text. Rejects if OBS wants a password and none is saved. */
+  function obsIdentify(hello, password, sha256b64) {
+    var d = (hello && hello.d) || {};
+    var out = { op: 1, d: { rpcVersion: 1, eventSubscriptions: OBS_EVENTS_SCENES } };
+    if (!d.authentication) return Promise.resolve(JSON.stringify(out));
+    if (!password) { var e = new Error("OBS asks for a password. Copy it from OBS (Tools → WebSocket Server Settings → Show Connect Info) into Kin Studio."); e.kind = "obs_password"; return Promise.reject(e); }
+    return obsAuth(password, d.authentication.salt, d.authentication.challenge, sha256b64).then(function (a) { out.d.authentication = a; return JSON.stringify(out); });
+  }
+  function obsRequestFrame(type, id) { return JSON.stringify({ op: 6, d: { requestType: type, requestId: String(id || type) } }); }
+  /* Scene name from an OBS frame, or null. op 5 = event, op 7 = request response. */
+  function obsSceneFromFrame(f) {
+    if (!f || typeof f !== "object" || !f.d) return null;
+    if (f.op === 5 && f.d.eventType === "CurrentProgramSceneChanged") return String((f.d.eventData && (f.d.eventData.sceneName || f.d.eventData.sceneUuid)) || "");
+    if (f.op === 7 && f.d.requestType === "GetCurrentProgramScene" && f.d.requestStatus && f.d.requestStatus.result) {
+      var r = f.d.responseData || {};
+      return String(r.currentProgramSceneName || r.sceneName || "");
+    }
+    return null;
+  }
+  /* One short line with what's on stream. Each piece is checked with the reply filter; blocked pieces are left out. */
+  function streamContextLine(info, opts) {
+    info = info || {}; opts = opts || {};
+    var ok = function (t) { return !opts.filter || opts.filter.check(t).ok; };
+    var parts = [];
+    if (opts.twitch !== false) {
+      var game = cleanInfo(info.game, 80), title = cleanInfo(info.title, 140);
+      if (game && ok(game)) parts.push("playing " + game);
+      if (title && ok(title)) parts.push('title "' + title + '"');
+      if (info.live === true) parts.push("live now");
+      else if (info.live === false) parts.push("offline");
+    }
+    if (opts.obs !== false) {
+      var scene = cleanInfo(info.scene, 60);
+      if (scene && ok(scene)) parts.push("scene: " + scene);
+    }
+    return parts.length ? "[Stream: " + parts.join(", ") + "]" : "";
   }
 
   /* ---------- secrets ---------- */
@@ -406,6 +494,7 @@
     var where = job.platform === "joystick" ? "Joystick.tv" : job.platform === "twitch" ? "Twitch" : "the stream";
     lines.push("(Live stream co-host mode on " + where + ". You are on camera next to me while I play. Talk to chat out loud.)");
     if (ctx.game_context) lines.push("What's happening: " + ctx.game_context);
+    if (ctx.stream_line) lines.push(ctx.stream_line);
     if (job.type === "chat") {
       lines.push("New chat messages:");
       job.lines.forEach(function (l) { lines.push("- " + l.name + ": " + l.text); });
@@ -421,6 +510,13 @@
     } else if (job.type === "command") {
       lines.push(job.name + " asked you directly: " + job.text);
       lines.push("Answer " + job.name + " by name.");
+    } else if (job.type === "scene") {
+      lines.push({
+        brb: "I just switched to my BRB screen. Tell chat in one short line that I'll be right back.",
+        starting: "I'm on my Starting soon screen. Welcome chat in one short line and say we're starting soon.",
+        ending: "I'm wrapping up the stream. Say a short, warm goodbye to chat.",
+        back: "I'm back from my break. Welcome me back in one short line."
+      }[job.kind] || "Say one short line to chat.");
     } else if (job.type === "test") {
       lines.push("Test message from " + job.name + ": " + job.text);
     }
@@ -484,6 +580,10 @@
     this.lastKinAt = this.now();
     this.lastChatReplyAt = 0;
     this.lastEventsAt = 0;
+    this.info = { title: "", game: "", live: null, viewers: 0, scene: "" };
+    this.sceneJob = null;
+    this.lastSceneAt = 0;
+    this.lastSceneKind = "";
     this.stats = { received: 0, filtered: 0, sent: 0, dropped: 0, errors: 0 };
     this.listeners = [];
     this.configure(settings);
@@ -508,7 +608,38 @@
     this.listeners.forEach(function (fn) { try { fn(e); } catch (_) {} });
   };
   CohostEngine.prototype.on = function (fn) { this.listeners.push(fn); };
-  CohostEngine.prototype.queued = function () { return this.commands.length + this.says.length + this.chat.length + (this.events.length ? 1 : 0); };
+  CohostEngine.prototype.queued = function () { return this.commands.length + this.says.length + this.chat.length + (this.events.length ? 1 : 0) + (this.sceneJob ? 1 : 0); };
+
+  /* 1.18 stream awareness. patch: { title, game, live, viewers }. Returns the names of the fields that changed. */
+  CohostEngine.prototype.setStreamInfo = function (patch) {
+    var self = this, changed = [];
+    ["title", "game", "live", "viewers"].forEach(function (k) {
+      if (patch && patch[k] !== undefined && patch[k] !== self.info[k]) { self.info[k] = patch[k]; changed.push(k); }
+    });
+    if (changed.length) this.emit("info", { changed: changed });
+    return changed;
+  };
+  /* OBS scene changed. initial = the scene we found on connect (never reacted to).
+     Returns the reaction queued ("brb" | "starting" | "ending" | "back") or "". */
+  CohostEngine.prototype.setScene = function (name, initial) {
+    name = String(name || "");
+    if (name === this.info.scene && !initial) return "";
+    this.info.scene = name;
+    var kind = sceneKind(name), prev = this.lastSceneKind;
+    this.lastSceneKind = kind;
+    this.emit("info", { changed: ["scene"] });
+    if (initial || !this.s.scene_react || !this.s.obs_enabled || this.s.mode !== "cohost") return "";
+    var react = kind || ((prev === "brb" || prev === "starting") ? "back" : "");
+    if (!react) return "";
+    // Went to BRB and came straight back before the Kin said anything: say nothing.
+    if (react === "back" && this.sceneJob) { this.sceneJob = null; return ""; }
+    if (this.lastSceneAt && this.now() - this.lastSceneAt < this.s.scene_gap_sec * 1000) return "";
+    this.sceneJob = { type: "scene", kind: react, platform: this.defaultPlatform || "stream" };
+    return react;
+  };
+  CohostEngine.prototype.streamLine = function (platform) {
+    return streamContextLine(this.info, { filter: this.filterFor(platform), twitch: !!this.s.twitch_info, obs: !!this.s.obs_enabled });
+  };
 
   /* Returns a short reason string when the event is dropped, "" when accepted. */
   CohostEngine.prototype.ingest = function (ev) {
@@ -583,7 +714,8 @@
     var s = this.s, now = this.now();
     if (this.says.length) return this.says.shift();
     if (this.commands.length) return this.commands.shift();
-    if (s.mode !== "cohost") return null;
+    if (s.mode !== "cohost") { this.sceneJob = null; return null; }
+    if (this.sceneJob) { var sj = this.sceneJob; this.sceneJob = null; this.lastSceneAt = now; this.lastKinAt = now; return sj; }
     if (this.events.length && now - this.lastEventsAt >= s.events_gap_sec * 1000) {
       var evs = this.events.splice(0, 8);
       var extra = this.events.length;
@@ -624,7 +756,7 @@
 
   CohostEngine.prototype.run = function (job) {
     var self = this, st = this.state, deps = this.deps;
-    var ctx = { game_context: this.s.game_context, reply_words: this.s.reply_words, adultsOn: this.adultsOn() };
+    var ctx = { game_context: this.s.game_context, stream_line: this.streamLine(job.platform), reply_words: job.type === "scene" ? Math.min(25, this.s.reply_words) : this.s.reply_words, adultsOn: this.adultsOn() };
     var prompt = buildPrompt(job, ctx);
     st.inflight = true;
     this.pacer.mark();
@@ -714,6 +846,16 @@
     Pacer: Pacer,
     CohostEngine: CohostEngine,
     rmsLevel: rmsLevel,
-    mouthFrom: mouthFrom
+    mouthFrom: mouthFrom,
+    cleanObsUrl: cleanObsUrl,
+    cleanInfo: cleanInfo,
+    sceneKind: sceneKind,
+    parseHelixChannel: parseHelixChannel,
+    parseHelixStream: parseHelixStream,
+    obsAuth: obsAuth,
+    obsIdentify: obsIdentify,
+    obsRequestFrame: obsRequestFrame,
+    obsSceneFromFrame: obsSceneFromFrame,
+    streamContextLine: streamContextLine
   };
 });

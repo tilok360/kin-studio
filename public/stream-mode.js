@@ -338,6 +338,90 @@
   }
   function joyStop() { jy.stop = true; try { if (jy.ws) jy.ws.close(); } catch (_) {} jy.ws = null; }
 
+  /* ---------- 1.18 stream awareness: Twitch title / game / live, OBS scene ---------- */
+  var info = { timer: null, channelId: "", channelLogin: "", lastErr: "" };
+  function helixHeaders() { return { Authorization: "Bearer " + tw.token, "Client-Id": S.twitch_client_id }; }
+  async function helixGet(path) {
+    var r = await http({ url: "https://api.twitch.tv/helix/" + path, headers: helixHeaders() });
+    if (r.status === 401 && tw.refresh && (await twitchRefresh())) r = await http({ url: "https://api.twitch.tv/helix/" + path, headers: helixHeaders() });
+    return r;
+  }
+  /* Works with whichever account is signed in (e.g. the Kin's own bot account) because it reads the Channel by name. */
+  async function infoPoll() {
+    if (!S.twitch_info || !S.twitch_enabled || !S.twitch_channel) return;
+    if (!tw.token) { await twitchLoadTokens(); if (!tw.token) { paintInfo("Sign in to Twitch (step 2) so the Kin can see your title and game."); return; } }
+    try {
+      if (info.channelLogin !== S.twitch_channel || !info.channelId) {
+        var u = await helixGet("users?login=" + encodeURIComponent(S.twitch_channel));
+        var d = u.json && u.json.data && u.json.data[0];
+        if (u.status !== 200 || !d) { paintInfo("Twitch couldn't find the channel \"" + S.twitch_channel + "\" (" + u.status + ")."); return; }
+        info.channelId = d.id; info.channelLogin = S.twitch_channel;
+      }
+      var ch = await helixGet("channels?broadcaster_id=" + encodeURIComponent(info.channelId));
+      var st = await helixGet("streams?user_id=" + encodeURIComponent(info.channelId));
+      var patch = Object.assign({}, K.parseHelixChannel(ch.json) || {}, K.parseHelixStream(st.json) || {});
+      if (ch.status !== 200) { paintInfo("Couldn't read the stream title from Twitch (" + ch.status + ")."); return; }
+      var changed = engine.setStreamInfo(patch);
+      if (changed.indexOf("title") >= 0 || changed.indexOf("game") >= 0) log("info", "Stream info: " + (engine.info.game || "no category") + " · " + (engine.info.title || "no title"));
+      if (changed.indexOf("live") >= 0) log("info", engine.info.live ? "Twitch says you're live." : "Twitch says you're offline.");
+      paintInfo();
+    } catch (e) { paintInfo("Couldn't reach Twitch for stream info: " + K.redactStream(e && e.message || e)); }
+  }
+  function infoStart() {
+    clearInterval(info.timer); info.timer = null;
+    if (!S.twitch_info || !S.twitch_enabled) return;
+    infoPoll();
+    info.timer = setInterval(infoPoll, S.info_poll_min * 60000);
+  }
+  function infoStop() { clearInterval(info.timer); info.timer = null; }
+
+  var obs = { ws: null, stop: true, tries: 0, timer: null, state: "" };
+  async function sha256b64(text) {
+    var h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    var b = new Uint8Array(h), s2 = "";
+    for (var i = 0; i < b.length; i++) s2 += String.fromCharCode(b[i]);
+    return btoa(s2);
+  }
+  function obsPill(state, text) { obs.state = text; setPill("smObsState", state, text); }
+  /* testOnly: connect once, report the scene, don't reconnect. */
+  function obsConnect(testOnly) {
+    obsDisconnect();
+    obs.stop = false;
+    var ws;
+    try { ws = new WebSocket(S.obs_url); } catch (e) { obsPill("", "Bad OBS address: " + S.obs_url); return; }
+    obs.ws = ws;
+    obsPill("", "Connecting to OBS…");
+    ws.onmessage = async function (m) {
+      var f; try { f = JSON.parse(m.data); } catch (_) { return; }
+      if (f.op === 0) {
+        try {
+          var pw = (await D.secretGet("obs_password")) || "";
+          ws.send(await K.obsIdentify(f, pw, sha256b64));
+        } catch (e) { obs.stop = true; obsPill("", e.message); try { ws.close(); } catch (_) {} }
+        return;
+      }
+      if (f.op === 2) { obs.tries = 0; obsPill("ok", "OBS connected"); ws.send(K.obsRequestFrame("GetCurrentProgramScene", "scene1")); return; }
+      var scene = K.obsSceneFromFrame(f);
+      if (scene != null) {
+        var initial = f.op === 7;
+        var react = engine.setScene(scene, initial);
+        obsPill("ok", "OBS scene: " + scene);
+        if (!initial) log("info", "OBS scene: " + scene + (react ? " (Kin will say a line)" : ""));
+        paintInfo();
+        if (testOnly && initial) { log("info", "OBS test worked. Current scene: " + scene); obs.stop = true; try { ws.close(); } catch (_) {} }
+      }
+    };
+    ws.onclose = function (e) {
+      if (obs.ws !== ws) return;
+      obs.ws = null;
+      if (e && e.code === 4009) { obs.stop = true; obsPill("", "OBS said the password is wrong. Re-copy it from OBS (Tools → WebSocket Server Settings → Show Connect Info)."); return; }
+      if (obs.stop || testOnly || !running || !S.obs_enabled) { if (!/password|OBS scene|Bad OBS/.test(obs.state)) obsPill("", obs.tries || testOnly ? "OBS not reachable. In OBS: Tools → WebSocket Server Settings → Enable WebSocket server." : "OBS disconnected"); return; }
+      obsPill("", "OBS not reachable, retrying… (Tools → WebSocket Server Settings → Enable)");
+      obs.timer = setTimeout(function () { if (running && S.obs_enabled && !obs.stop) obsConnect(false); }, Math.min(60000, 2000 * Math.pow(2, obs.tries++)));
+    };
+  }
+  function obsDisconnect() { obs.stop = true; clearTimeout(obs.timer); obs.timer = null; var w = obs.ws; obs.ws = null; try { if (w) w.close(); } catch (_) {} }
+
   /* ---------- engine ---------- */
   var running = false, tickTimer = null, overlayPort = 0;
   function isAdults() { try { return typeof adultsOn === "function" ? !!adultsOn() : false; } catch (_) { return false; } }
@@ -395,6 +479,8 @@
     var hk = await D.hotkeys({ mute: S.hotkey_mute, skip: S.hotkey_skip, pause: S.hotkey_pause });
     Object.keys(hk || {}).forEach(function (k) { if (hk[k] === "taken" || hk[k] === "invalid") log("warn", "Hotkey for " + k + " is " + hk[k] + "."); });
     await micStart();
+    infoStart();
+    if (S.obs_enabled) { obs.tries = 0; obsConnect(false); }
     clearInterval(tickTimer);
     tickTimer = setInterval(function () { engine.tick(); }, 500);
     setPill("smRunState", "ok", "Live: " + c.name + (S.mode === "cohost" ? " is co-hosting" : " answers " + S.command));
@@ -403,7 +489,7 @@
   async function stop() {
     running = false;
     clearInterval(tickTimer); tickTimer = null;
-    twitchStop(); joyStop(); micStop();
+    twitchStop(); joyStop(); micStop(); infoStop(); obsDisconnect(); engine.sceneJob = null;
     engine.skip();
     try { await D.hotkeys({}); } catch (_) {}
     setPill("smRunState", "", "Stopped");
@@ -478,6 +564,16 @@
       txt("smColor", "Caption color", "#ffffff") + txt("smBg", "Caption background", "rgba(0,0,0,0.55)") + num("smHold", "Keep captions up for (seconds)", 1, 60) + '<label>Avatar side</label><select id="smSide"><option value="left">Left</option><option value="right">Right</option></select>' +
       '<h3>Avatar pictures</h3><p class="hint">Upload your Kin\'s selfies. Only Idle is needed. Add Talking (mouth open) and Blink for a PNGTuber look; mood pictures swap in when the Kin sounds happy, surprised and so on. PNG with a see-through background looks best.</p><div class="sm-slots" id="smSlots"></div></div>' +
       '<div class="card"><h3>7. Hotkeys</h3><p class="hint">Work even while the game has focus. Examples: Ctrl+Alt+M, F9.</p>' + txt("smHkMute", "Mute / unmute Kin", "Ctrl+Alt+M") + txt("smHkSkip", "Skip the current reply", "Ctrl+Alt+S") + txt("smHkPause", "Pause / resume auto-chat", "Ctrl+Alt+P") + '<div class="row"><button type="button" class="btn" id="smSave">Save stream settings</button></div></div>' +
+      '<div class="card"><h3>8. Stream awareness</h3><p class="hint">Lets your Kin know what\'s on stream besides chat. It\'s added as one short line to the messages the Kin already gets, so it costs no extra Kindroid messages. Titles and scene names go through the same blocked-word check as chat.</p>' +
+      chk("smInfoOn", "Tell the Kin my stream title, game and whether I\'m live (from Twitch)") + num("smInfoMin", "Check Twitch every (minutes, 2–10)", 2, 10) +
+      '<p class="hint">Uses your Twitch sign-in from step 2. It reads the Channel above, so it works when the Kin has its own Twitch account.</p>' +
+      chk("smObsOn", "Tell the Kin which OBS scene is showing") +
+      '<p class="hint">One-time setup in OBS 28 or newer: Tools → WebSocket Server Settings → tick Enable WebSocket server. If Enable Authentication is ticked, press Show Connect Info and copy the Server Password here.</p>' +
+      txt("smObsUrl", "OBS address", "ws://localhost:4455") + '<label>OBS WebSocket password (saved encrypted on this PC)</label><input id="smObsPw" type="password" autocomplete="off" placeholder="leave empty if authentication is off">' +
+      '<div class="row"><button type="button" class="btn" id="smObsTest">Test OBS connection</button><button type="button" class="btn" id="smObsForget">Forget password</button><span id="smObsState" class="badge">OBS off</span></div>' +
+      chk("smSceneOn", "Say a short line when I switch to a BRB, Starting soon or Ending scene (and when I come back)") + num("smSceneGap", "At most one scene line every (seconds)", 30, 3600) +
+      '<p class="hint">Scene names count if they contain words like BRB, Break, Away, Starting, Soon, Intro, Ending or Outro. Needs the OBS box above ticked and Co-host mode.</p>' +
+      '<p class="hint" id="smInfoNow">The Kin sees: nothing yet.</p></div>' +
       '<div class="card"><h3>Activity</h3><div id="smLog"></div></div>';
     var settingsPanel = $s("p-settings");
     (settingsPanel && settingsPanel.parentNode ? settingsPanel.parentNode : document.body).insertBefore(sec, settingsPanel || null);
@@ -492,7 +588,8 @@
     ["smModOnly", "mod_only"], ["smAllowOnly", "allowlist_only"], ["smAllow", "allow_users"], ["smBlock", "block_users"], ["smWords2", "block_words"], ["smCool", "user_cooldown_sec"], ["smQueue", "max_queue"],
     ["smSpeak", "speak"], ["smPost", "post_to_chat"], ["smDuck", "duck_on_mic"], ["smMicDev", "mic_device"], ["smMicTh", "mic_threshold"],
     ["smFont", "overlay_font"], ["smSize", "overlay_size"], ["smPos", "overlay_position"], ["smColor", "overlay_color"], ["smBg", "overlay_bg"], ["smHold", "caption_hold_sec"], ["smSide", "avatar_side"],
-    ["smHkMute", "hotkey_mute"], ["smHkSkip", "hotkey_skip"], ["smHkPause", "hotkey_pause"], ["smKin", "kin_id"]
+    ["smHkMute", "hotkey_mute"], ["smHkSkip", "hotkey_skip"], ["smHkPause", "hotkey_pause"], ["smKin", "kin_id"],
+    ["smInfoOn", "twitch_info"], ["smInfoMin", "info_poll_min"], ["smObsOn", "obs_enabled"], ["smObsUrl", "obs_url"], ["smSceneOn", "scene_react"], ["smSceneGap", "scene_gap_sec"]
   ];
   function paintForm() {
     MAP.forEach(function (m) { var el = $s(m[0]); if (!el) return; if (el.type === "checkbox") el.checked = !!S[m[1]]; else el.value = S[m[1]] == null ? "" : S[m[1]]; });
@@ -508,7 +605,22 @@
     saveSettings(S);
     engine.configure(S); engine.defaultPlatform = defaultPlatform();
     if (overlayPort) D.config(overlayConfig());
-    if (running) { D.hotkeys({ mute: S.hotkey_mute, skip: S.hotkey_skip, pause: S.hotkey_pause }); micStart(); }
+    if (running) {
+      D.hotkeys({ mute: S.hotkey_mute, skip: S.hotkey_skip, pause: S.hotkey_pause }); micStart();
+      var infoKey = [S.twitch_info, S.twitch_enabled, S.twitch_channel, S.info_poll_min].join("|");
+      if (infoKey !== lastInfoKey) infoStart();
+      var obsKey = [S.obs_enabled, S.obs_url].join("|");
+      if (obsKey !== lastObsKey) { if (S.obs_enabled) { obs.tries = 0; obsConnect(false); } else { obsDisconnect(); obsPill("", "OBS off"); } }
+    }
+    lastInfoKey = [S.twitch_info, S.twitch_enabled, S.twitch_channel, S.info_poll_min].join("|");
+    lastObsKey = [S.obs_enabled, S.obs_url].join("|");
+    paintInfo();
+  }
+  var lastInfoKey = "", lastObsKey = "";
+  function paintInfo(note) {
+    var el = $s("smInfoNow"); if (!el) return;
+    var line = engine.streamLine(defaultPlatform() === "stream" ? "twitch" : defaultPlatform());
+    el.textContent = (note ? note + " " : "") + "The Kin sees: " + (line || "nothing yet (it updates once Stream mode starts).");
   }
   function paintKins() {
     var sel = $s("smKin"); if (!sel) return;
@@ -567,6 +679,16 @@
     $s("smSayBtn").onclick = function () { if (engine.say($s("smSay").value)) { $s("smSay").value = ""; log("info", "Line queued for the Kin."); if (!running) engine.tick(); } };
     $s("smSay").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $s("smSayBtn").click(); } });
     $s("smSave").onclick = function () { readForm(); log("info", "Stream settings saved."); };
+    $s("smObsPw").addEventListener("change", async function () {
+      var v = $s("smObsPw").value; $s("smObsPw").value = "";
+      if (!v) return;
+      await D.secretSet("obs_password", v);
+      $s("smObsPw").placeholder = "saved (type a new one to replace it)";
+      log("info", "OBS password saved (encrypted on this PC).");
+    });
+    $s("smObsForget").onclick = async function () { await D.secretClear("obs_"); $s("smObsPw").value = ""; $s("smObsPw").placeholder = "leave empty if authentication is off"; log("info", "OBS password forgotten."); };
+    $s("smObsTest").onclick = function () { readForm(); obs.tries = 0; obsConnect(!running || !S.obs_enabled); };
+    D.secretGet("obs_password").then(function (t) { if (t && $s("smObsPw")) $s("smObsPw").placeholder = "saved (type a new one to replace it)"; });
     $s("smTwConnect").onclick = function () { readForm(); twitchConnect().catch(function (e) { setPill("smTwState", "", "Twitch sign-in failed: " + K.redactStream(e && e.message)); }); };
     $s("smTwForget").onclick = async function () { twitchStop(); await D.secretClear("twitch_"); tw.token = tw.refresh = ""; setPill("smTwState", "", "Signed out"); };
     $s("smJyConnect").onclick = function () { readForm(); joyConnect().catch(function (e) { setPill("smJyState", "", "Joystick sign-in failed: " + K.redactStream(e && e.message)); }); };

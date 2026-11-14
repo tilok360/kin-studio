@@ -135,7 +135,7 @@ function createSecretStore(file, crypt) {
     fs.writeFileSync(tmp, JSON.stringify(obj), { mode: 0o600 });
     fs.renameSync(tmp, file);
   }
-  const NAME = /^(twitch|joystick)_[a-z_]{2,32}$/;
+  const NAME = /^(twitch|joystick|obs)_[a-z_]{2,32}$/;
   return {
     get(name) {
       if (!NAME.test(String(name))) return null;

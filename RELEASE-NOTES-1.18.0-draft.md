@@ -31,8 +31,17 @@ Talk as a different persona, and edit what your Kin has learned. Windows, Androi
 - Every push is saved on your device with its time and revision, including refused ones (the last 15 per Kin). **Put back in the fields** brings an old copy back.
 - The regular **Push to Kindroid** button is unchanged and never touches Learned context.
 
+## Stream mode: stream awareness (new, Windows)
+Your Kin now knows what's going on in your stream, not just in chat. Find it in **Stream → 8. Stream awareness**.
+- **Title, game and live/offline from Twitch.** On by default. Kin Studio reads your stream title, category and whether you're live every 3 minutes (you can pick 2–10), plus once when you press Start. It uses your Twitch sign-in from step 2 and reads the **Channel** by name, so it works when your Kin signs in with its own Twitch account.
+- **Which OBS scene is showing.** Off by default. OBS 28 and newer have this built in: in OBS go to **Tools → WebSocket Server Settings**, tick **Enable WebSocket server**, and if **Enable Authentication** is ticked, press **Show Connect Info** and paste the Server Password into Kin Studio. The password is saved encrypted on your PC, like your Twitch sign-in, and never goes into exports. **Test OBS connection** shows the current scene.
+- **No extra Kindroid messages.** All of this goes in as one short line with the messages your Kin already gets, for example `[Stream: playing Hunt: Showdown, title "Swamp run", live now, scene: Gameplay]`. The line shows under the settings so you can see exactly what your Kin sees.
+- **Same safety check.** The title, game and scene name go through the blocked-word check. If one has a blocked word, it's left out.
+- **Optional scene lines.** Off by default. When you switch to a scene with BRB, Break, Away, Starting, Soon, Intro, Ending or Outro in its name, the Kin says one short line ("be right back", "starting soon", goodbye), and welcomes you back when you leave a BRB or Starting soon scene. At most one every 2 minutes (adjustable), and it uses Stream mode's usual share of Kindroid's limit. Needs the OBS option on and Co-host mode.
+- Your Kin can't see the screen itself. Kindroid's API doesn't take pictures.
+
 ## Not changed
-Stream mode, the 28 Kokoro voices, Games, the adults-only setting, and exports (still without your API key or Twitch sign-in).
+The rest of Stream mode, the 28 Kokoro voices, Games, the adults-only setting, and exports (still without your API key or Twitch sign-in).
 
 ## Downloads
 | File | For |
