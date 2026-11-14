@@ -1,4 +1,4 @@
-# Kin Studio 1.16.0 (DRAFT, not released)
+# Kin Studio 1.16.0
 
 Easier setup and a steadier connection to Kindroid.
 
@@ -25,7 +25,11 @@ The 28 Kokoro voices, the adults-only setting, exports (still without your API k
 ## Downloads
 | File | For |
 |---|---|
+| `Kin-Studio-Setup-1.16.0.exe` | Windows 10/11 (x64). Installs for your user only. |
 | `Kin-Studio.apk` / `Kin-Studio-1.16.0.apk` | Android (versionName 2.5, versionCode 16) |
 
 ### Android
 If you have 1.14.1 or 1.15.0, this APK installs over it. Don't uninstall. It's signed with the same key.
+
+### Windows
+Run `Kin-Studio-Setup-1.16.0.exe`. If SmartScreen warns (the installer isn't code-signed yet), click **More info → Run anyway**. Your data in `Documents\Kin Studio\data` is kept.
