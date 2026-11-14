@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kin Studio overlay</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+  body{font-family:var(--font,"Segoe UI"),system-ui,sans-serif}
+  #stage{position:fixed;inset:0}
+  #avatarWrap{position:absolute;bottom:2vh;width:34vh;height:34vh;display:none}
+  #avatarWrap.left{left:2vw}#avatarWrap.right{right:2vw}
+  #avatarWrap.on{display:block}
+  #bob{width:100%;height:100%;animation:bob 3.2s ease-in-out infinite;transform-origin:50% 100%}
+  #avatar{width:100%;height:100%;object-fit:contain;transform-origin:50% 90%;transition:transform 60ms linear;filter:drop-shadow(0 6px 14px rgba(0,0,0,.35))}
+  @keyframes bob{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-1.2%) rotate(.6deg)}}
+  #avatarWrap.thinking #bob{animation-duration:1.6s}
+  #cap{position:absolute;left:50%;transform:translateX(-50%) translateY(12px);max-width:80vw;opacity:0;
+       transition:opacity .35s ease,transform .35s ease;padding:.35em .7em;border-radius:.5em;
+       font-size:var(--size,34px);line-height:1.25;color:var(--color,#fff);background:var(--bg,rgba(0,0,0,.55));
+       text-shadow:0 2px 4px rgba(0,0,0,.7);text-align:center;box-sizing:border-box}
+  #cap.bottom{bottom:5vh}#cap.top{top:5vh}#cap.middle{top:50%;transform:translate(-50%,-50%)}
+  #cap.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #cap.middle.show{transform:translate(-50%,-50%)}
+  #cap .w{opacity:0;transition:opacity .18s}#cap .w.on{opacity:1}
+  #cap.hide{display:none}
+  body.avatarOnly #avatarWrap{width:96vh;height:96vh;bottom:2vh;left:50%;transform:translateX(-50%)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="avatarWrap" class="left"><div id="bob"><img id="avatar" alt=""></div></div>
+  <div id="cap" class="bottom"></div>
+</div>
+<script>
+(function(){
+  var path = location.pathname.replace(/\/+$/,'');
+  var q = new URLSearchParams(location.search);
+  var view = /\/avatar$/.test(path) ? 'avatar' : /\/captions$/.test(path) ? 'captions' : 'all';
+  if (view === 'avatar') document.body.classList.add('avatarOnly');
+  var cap = document.getElementById('cap'), wrap = document.getElementById('avatarWrap'), img = document.getElementById('avatar');
+  if (view === 'avatar') cap.classList.add('hide');
+  var cfg = {}, avatars = [], emotion = 'neutral', mouth = 0, talking = false, blinking = false, hideT = null, revealT = null;
+  var imgs = {};
+  function has(s){ return avatars.indexOf(s) >= 0; }
+  function src(s){ return '/overlay/img/' + s + '?v=' + (cfg._v || 0); }
+  function preload(){ imgs = {}; avatars.forEach(function(s){ var i = new Image(); i.src = src(s); imgs[s] = i; }); }
+  function applyConfig(){
+    var r = document.documentElement.style;
+    r.setProperty('--font', q.get('font') || cfg.overlay_font || 'Segoe UI');
+    r.setProperty('--size', (q.get('size') || cfg.overlay_size || 34) + 'px');
+    r.setProperty('--color', q.get('color') || cfg.overlay_color || '#fff');
+    r.setProperty('--bg', q.get('bg') || cfg.overlay_bg || 'rgba(0,0,0,.55)');
+    var pos = q.get('pos') || cfg.overlay_position || 'bottom';
+    cap.classList.remove('bottom','top','middle'); cap.classList.add(pos);
+    var side = q.get('side') || cfg.avatar_side || 'left';
+    wrap.classList.remove('left','right'); wrap.classList.add(side);
+    wrap.classList.toggle('on', view !== 'captions' && avatars.length > 0);
+  }
+  function frame(){
+    if (!avatars.length) return;
+    var e = emotion === 'neutral' ? 'idle' : emotion;
+    var base = has(e) ? e : 'idle';
+    var open = talking && mouth > 0.22;
+    var pick = base;
+    if (open) {
+      if (has(base + '_talk')) pick = base + '_talk';
+      else if (base === 'idle' && has('talk')) pick = 'talk';
+    } else if (blinking && has('blink') && base === 'idle') pick = 'blink';
+    if (!has(pick)) pick = has('idle') ? 'idle' : avatars[0];
+    var want = src(pick);
+    if (img.getAttribute('src') !== want) img.setAttribute('src', want);
+    // No separate talking picture: squash-and-stretch with the voice level instead.
+    var noTalkImg = !(has(base + '_talk') || (base === 'idle' && has('talk')));
+    var k = talking && noTalkImg ? mouth : 0;
+    img.style.transform = 'scale(' + (1 + k * 0.03) + ',' + (1 - k * 0.05 + k * 0.08) + ')';
+  }
+  function scheduleBlink(){
+    setTimeout(function(){ if (!talking) { blinking = true; frame(); setTimeout(function(){ blinking = false; frame(); scheduleBlink(); }, 140); } else scheduleBlink(); }, 2500 + Math.random() * 3500);
+  }
+  function showCaption(text, hold){
+    clearTimeout(hideT); clearInterval(revealT);
+    if (view === 'avatar') return;
+    var words = String(text || '').split(/\s+/).filter(Boolean);
+    cap.innerHTML = '';
+    words.forEach(function(w, i){ var s = document.createElement('span'); s.className = 'w'; s.textContent = w + (i < words.length - 1 ? ' ' : ''); cap.appendChild(s); });
+    cap.classList.add('show');
+    var spans = cap.querySelectorAll('.w'), i = 0;
+    revealT = setInterval(function(){
+      if (i < spans.length) { spans[i].classList.add('on'); i++; }
+      else { clearInterval(revealT); if (!talking) scheduleHide(hold); }
+    }, 260);
+    cap._hold = hold;
+  }
+  function scheduleHide(hold){ clearTimeout(hideT); hideT = setTimeout(function(){ cap.classList.remove('show'); }, (hold || cfg.caption_hold_sec || 6) * 1000); }
+  function revealAll(){ clearInterval(revealT); cap.querySelectorAll('.w').forEach(function(s){ s.classList.add('on'); }); }
+  function onEvent(ev){
+    if (!ev || !ev.type) return;
+    if (ev.type === 'config') { cfg = Object.assign({}, ev.config || {}); cfg._v = Date.now(); if (ev.avatars) avatars = ev.avatars; else fetch('/overlay/config.json').then(function(r){return r.json();}).then(function(j){ avatars = j.avatars || []; preload(); applyConfig(); frame(); }).catch(function(){}); preload(); applyConfig(); frame(); return; }
+    if (ev.type === 'caption') { emotion = ev.emotion || 'neutral'; showCaption(ev.text, ev.hold); frame(); return; }
+    if (ev.type === 'clear') { revealAll(); cap.classList.remove('show'); talking = false; mouth = 0; emotion = 'neutral'; frame(); return; }
+    if (ev.type === 'talk') { talking = !!ev.on; if (!talking) { mouth = 0; revealAll(); scheduleHide(cap._hold); } frame(); return; }
+    if (ev.type === 'mouth') { mouth = Number(ev.v) || 0; talking = true; frame(); return; }
+    if (ev.type === 'state') { wrap.classList.toggle('thinking', ev.state === 'thinking'); if (ev.state === 'idle' && !talking) { emotion = 'neutral'; frame(); } return; }
+  }
+  window.__kinOverlay = onEvent; // test hook
+  function connect(){
+    var es = new EventSource('/overlay/events');
+    es.onmessage = function(m){ try { onEvent(JSON.parse(m.data)); } catch(_){} };
+    es.onerror = function(){ /* EventSource reconnects on its own */ };
+  }
+  applyConfig(); scheduleBlink(); connect();
+})();
+</script>
+</body>
+</html>

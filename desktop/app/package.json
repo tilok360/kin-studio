@@ -1,0 +1,7 @@
+{
+  "name": "kin-studio",
+  "productName": "Kin Studio",
+  "version": "1.17.0",
+  "main": "main.js",
+  "private": true
+}

@@ -11,11 +11,11 @@
 <meta name="apple-mobile-web-app-title" content="Kin Studio">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/__grok/manifest.webmanifest">
-<title>Kin Studio 1.16.0</title>
-<meta name="kin-studio-version" content="1.16.0">
-<meta name="kin-studio-android" content="2.5 (16)">
+<title>Kin Studio 1.17.0</title>
+<meta name="kin-studio-version" content="1.17.0">
+<meta name="kin-studio-android" content="2.6 (17)">
 <script>window.KinKokoro={lastError:"",warmup:async()=>{},speak:async()=>{},interrupt(){}};</script>
-<script>window.KIN_STUDIO={app:"1.16.0",androidName:"2.5",androidCode:16,publicUrl:"https://kin-studio1.grok.me/",apkUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk",exeUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe"};</script>
+<script>window.KIN_STUDIO={app:"1.17.0",androidName:"2.6",androidCode:17,publicUrl:"https://kin-studio1.grok.me/",apkUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk",exeUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe"};</script>
 <script src="/kin-client.js"></script>
 <script>
 /* === KIN_CLIENT_INLINE_START === */
@@ -1462,7 +1462,7 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
     </p>
     <div class="section">Kokoro</div>
     <p class="hint">Voices tab → pick a named English model → Test. First play loads the on-device model. Stop or Send cuts speech.</p>
-    <p class="ver-foot" id="verFoot">Kin Studio 1.16.0 · Android 2.5 (versionCode 16)</p>
+    <p class="ver-foot" id="verFoot">Kin Studio 1.17.0 · Android 2.6 (versionCode 17)</p>
   </div>
 </section>
 
@@ -4871,7 +4871,7 @@ function collectBackup(){
   });
   var payload={
     format:'kin-studio-backup-v1',
-    app:'Kin Studio 1.16.0',
+    app:'Kin Studio 1.17.0',
     exportedAt:new Date().toISOString(),
     characters:chars(),
     personas:personas(),
@@ -8154,5 +8154,8 @@ else setTimeout(firstRun,150);
 })();
 </script>
 <script src="/archive.js"></script>
+<script>/* 1.17 Stream mode: Windows app only. Nothing loads on phones or the website. */
+(function(){try{if(!(window.KinDesktop&&window.KinDesktop.stream))return;var a=document.createElement('script');a.src='/stream-core.js';a.onload=function(){var b=document.createElement('script');b.src='/stream-mode.js';document.body.appendChild(b);};document.body.appendChild(a);}catch(e){}})();
+</script>
 </body>
 </html>

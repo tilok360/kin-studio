@@ -73,7 +73,7 @@ async function chromeDump(url) {
   });
 }
 
-test("headless chrome loads 1.16.0 phone.html and KinClient mock API works", async (t) => {
+test("headless chrome loads 1.17.0 phone.html and KinClient mock API works", async (t) => {
   const server = await startServer();
   const { port } = server.address();
   const url = "http://127.0.0.1:" + port + "/__smoke.html";
@@ -94,7 +94,7 @@ test("headless chrome loads 1.16.0 phone.html and KinClient mock API works", asy
     assert.match(out, /PASS stream assembled/);
     assert.match(out, /PASS timeout kind/);
     assert.match(out, /PASS 429 kind/);
-    assert.match(out, /PASS iframe 1\.16\.0/);
+    assert.match(out, /PASS iframe 1\.17\.0/);
     assert.match(out, /PASS iframe KinClient/);
     assert.match(out, /PASS cancel button/);
     assert.match(out, /PASS api key is password/);
