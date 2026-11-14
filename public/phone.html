@@ -1238,6 +1238,7 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
 .fix-row .fix-ic{font-weight:700;width:1.2em}.fix-row.ok .fix-ic{color:#9fe3b8}.fix-row.bad .fix-ic{color:#ff9b9b}.fix-row.warn .fix-ic{color:#f3d28a}
 .empty-card{border:1px dashed rgba(255,255,255,.18);border-radius:12px;padding:14px;margin:8px 0;text-align:center}
 .empty-card[hidden]{display:none}
+.badge-exp{display:inline-block;font-size:.72em;font-weight:600;padding:1px 6px;border-radius:8px;background:#7a4b00;color:#ffe2a8;vertical-align:middle;margin-left:4px}
 </style>
 </head>
 <body>
@@ -1532,10 +1533,11 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
     <textarea id="peAppearance" maxlength="800" rows="3" placeholder="Appearance"></textarea>
     <label>Face detail <span class="lim" id="lim-peFace">0/200</span> <button type="button" class="copy-mini" data-ccopy="peFace" data-clabel="Face detail">Copy</button></label>
     <textarea id="peFace" maxlength="200" rows="2" placeholder="Face detail"></textarea>
-    <details class="acc"><summary>Talk as (Kindroid persona switching, experimental)</summary>
+    <details class="acc"><summary>Talk as (Kindroid persona switching) <span class="badge-exp">Experimental</span></summary>
       <label>Kindroid persona ID <button type="button" class="copy-mini" data-ccopy="peKindroidId" data-clabel="Kindroid persona ID">Copy</button></label>
       <input id="peKindroidId" placeholder="optional: the persona's ID in Kindroid">
-      <p class="hint">With an ID, Talk as switches your whole Kindroid persona to this one. Without an ID, it only changes the name and gender your Kins see. If a chat has a persona attached in Kindroid, that persona wins and nothing changes. The Kindroid app doesn't show persona IDs, so you'd have to find it in the web app's network traffic. Copy it exactly: Kindroid accepts any ID without checking, so a typo won't show an error. It just won't switch.</p>
+      <p class="hint"><strong>Experimental:</strong> in our live test (Nov 14), Kindroid accepted the persona setting but the persona didn't change. It hasn't been tried with a real persona ID yet, so it may not switch at all. If it works for you, please say so in the Discord.</p>
+      <p class="hint">With an ID, Talk as is meant to switch your whole Kindroid persona to this one. Without an ID, it only changes the name and gender your Kins see. If a chat has a persona attached in Kindroid, that persona wins and nothing changes. The Kindroid app doesn't show persona IDs, so you'd have to find it in the web app's network traffic. Copy it exactly: Kindroid accepts any ID without checking, so a typo won't show an error. It just won't switch.</p>
       <label><input type="checkbox" id="peIsHome"> Switch back to this one after Talk as (your usual persona)</label>
     </details>
     <div class="row" style="margin-top:10px">
@@ -1567,7 +1569,7 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
       <button type="button" class="btn danger" id="btnChatWipe"><span class="ico">⌫</span>Wipe</button>
     </div>
     <div class="talkas-row" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0">
-      <label class="hint" for="chatTalkAs" style="margin:0">Talk as</label>
+      <label class="hint" for="chatTalkAs" style="margin:0">Talk as <span class="badge-exp">Experimental</span></label>
       <select id="chatTalkAs" style="max-width:240px"><option value="">Kindroid's current persona</option></select>
       <span class="hint" id="chatTalkAsHint" hidden>Switches your persona everywhere in Kindroid while it sends, then switches back.</span>
     </div>
@@ -1608,7 +1610,7 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
     <select id="gManualKin" style="display:none"></select>
     <label>Max AI replies (auto)</label><input id="gMax" type="number" min="1" max="20" value="3">
     <label><input type="checkbox" id="gSpeak" checked> Auto-voice</label>
-    <label>Talk as</label>
+    <label>Talk as <span class="badge-exp">Experimental</span></label>
     <select id="gTalkAs"><option value="">Kindroid's current persona</option></select>
     <p class="hint" id="gTalkAsHint" hidden>Switches your persona everywhere in Kindroid while your message posts, then switches back.</p>
     <label>Message</label>
@@ -5402,7 +5404,7 @@ function talkAsPair(personaId){
 }
 function talkAsWarnOk(){
   if(store.get('talkAsWarned', false)) return true;
-  const ok=window.confirm('Talk as changes your persona everywhere in your Kindroid account while the message sends, including the Kindroid app. Then Kin Studio switches back to your usual persona.\n\nIf you chat in the Kindroid app at the same moment, that message could go out as the wrong persona. This uses a part of Kindroid\'s API that isn\'t documented, so it may stop working.\n\nEach message sent this way uses 3 of Kindroid\'s 10 requests per 30 seconds.\n\nContinue?');
+  const ok=window.confirm('Talk as is EXPERIMENTAL. Kindroid accepted the switch in testing but the persona didn\'t visibly change, so it may not work yet.\n\nTalk as changes your persona everywhere in your Kindroid account while the message sends, including the Kindroid app. Then Kin Studio switches back to your usual persona.\n\nIf you chat in the Kindroid app at the same moment, that message could go out as the wrong persona. This uses a part of Kindroid\'s API that isn\'t documented, so it may stop working.\n\nEach message sent this way uses 3 of Kindroid\'s 10 requests per 30 seconds.\n\nContinue?');
   if(ok) store.set('talkAsWarned', true);
   return ok;
 }

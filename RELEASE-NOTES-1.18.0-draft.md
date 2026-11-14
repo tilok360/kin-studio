@@ -4,7 +4,9 @@ Talk as a different persona, and edit what your Kin has learned. Windows, Androi
 
 > **Heads up:** both features use parts of Kindroid's API that Kindroid hasn't documented. Other API users found them, and Kindroid's support calls them "undocumented, unsupported, and may change." If Kindroid changes them, Kin Studio tells you plainly and doesn't send anything half-done. Kindroid is also planning a new API, so these may need updating later.
 
-## Talk as (new, in Chat and Groups)
+## Talk as (new, in Chat and Groups) — Experimental
+> **Experimental.** In a live test on Nov 14, Kindroid accepted the persona setting (it answered OK), but the persona didn't change. It hasn't been tested with a real persona ID yet, so we don't know whether it switches. The app labels it Experimental everywhere it appears. If it works for you, tell us in the Discord.
+
 - Pick a persona under **Talk as** and your message goes to the Kin as that persona. Kin Studio switches your persona, sends the message, then switches back to your usual one. The switch back always runs, even if the send fails or you cancel.
 - **This switches your persona everywhere in your Kindroid account while it sends,** including the Kindroid app. It takes a second or two, but if you message from the Kindroid app at that exact moment, that message could go out as the wrong persona. The app warns you the first time.
 - Set it up on the Personas tab:
