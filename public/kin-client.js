@@ -652,8 +652,19 @@
   /* Gender words as the Kindroid app shows them. A guess: not documented for personas. */
   var PERSONA_GENDER = { male: "Male", female: "Female", nonbinary: "Non-binary" };
 
+  /* Kindroid's own reason from an update-info error. Verified live Nov 14 2026: update-info
+     answers errors in plain text (schema messages like "\"x\" is not allowed"), not JSON. */
+  function kindroidReason(e) {
+    var raw = String((e && (e.body || e.message)) || "").replace(/^\d{3}:\s*/, "").trim();
+    raw = redact(raw).replace(/\s+/g, " ").slice(0, 160);
+    return raw && !/^(OK|bad|error)$/i.test(raw) ? raw : "";
+  }
+
   /* Body for a persona switch. With a Kindroid persona ID it uses active_persona_id (undocumented).
-     Without one it falls back to the documented account-wide user_name / user_gender only. */
+     Without one it falls back to the documented account-wide user_name / user_gender only.
+     Verified live Nov 14 2026: active_persona_id (and user_persona_id) are accepted string fields,
+     and Kindroid answers 200 for ANY persona ID string without checking it exists. So a typo in the
+     ID is not caught by Kindroid; the app can't tell a wrong ID from a right one. */
   function personaSwitchBody(ai_id, persona) {
     persona = persona || {};
     var body = { ai_id: String(ai_id || "") };
@@ -697,8 +708,9 @@
       await call("/update-info", personaSwitchBody(opts.ai_id, opts.persona));
     } catch (e) {
       var st = e && e.status;
+      var reason = kindroidReason(e);
       var why = st === 400 || st === 404 || (e && e.kind === "not_found")
-        ? "Kindroid didn't accept the persona switch (" + (st || "400/404") + "). Persona switching uses a part of Kindroid's API that isn't documented, and it may have changed. Check the Kindroid persona ID on the Personas tab."
+        ? "Kindroid didn't accept the persona switch (" + (st || "400/404") + (reason ? ": " + reason : "") + "). Persona switching uses a part of Kindroid's API that isn't documented, and it may have changed. Check the Kindroid persona ID on the Personas tab."
         : redact((e && e.message) || "The persona switch failed.");
       var pe = KindroidError("persona_switch", why + " Nothing was sent.", { retry: false, status: st });
       pe.cause = e && e.kind;
@@ -735,7 +747,8 @@
     { key: "durable_facts", local: "importantFacts", label: "Important facts", max: 1200 },
     { key: "ongoing_context", local: "ongoingThreads", label: "Ongoing threads", max: 800 }
   ];
-  /* Used only when the user has no revision number. A documented GUESS, not something Kindroid published. */
+  /* Used only when the user has no revision number. A documented GUESS, not something Kindroid published.
+     Verified live Nov 14 2026: Kindroid requires a whole number >= 0 and never sends the current one back. */
   var LEARNED_REVISION_GUESS = 0;
 
   function parseRevision(v) {
@@ -762,7 +775,9 @@
     if (rev == null) problems.push("Revision must be a whole number.");
     return { ok: !problems.length, problems: problems, body: { ai_id: id, developed_context: dc, developed_context_revision: rev } };
   }
-  /* Look for a revision number in a 409 body, in case Kindroid sends the current one back. Unverified. */
+  /* Look for a revision number in a 409 body, in case Kindroid ever sends the current one back.
+     Verified live Nov 14 2026: today's 409 is plain text with NO number
+     ("Learned context changed while you were editing it. Try again."), so this returns null. Kept for later API changes. */
   function revisionFromBody(text) {
     var s = String(text || "");
     try {
@@ -792,7 +807,7 @@
     } catch (e) {
       var st = e && e.status;
       var raw = (e && (e.body || e.message)) || "";
-      if (st === 409 || (e && e.kind === "conflict")) {
+      if (st === 409 || (e && e.kind === "conflict") || /learned context changed/i.test(raw)) {
         var srv = revisionFromBody(raw);
         return {
           ok: false, state: "conflict", sentRevision: built.body.developed_context_revision, serverRevision: srv, body: built.body,
@@ -802,8 +817,14 @@
         };
       }
       if (st === 400) {
+        var why400 = kindroidReason(e);
         return { ok: false, state: "bad_request", sentRevision: built.body.developed_context_revision, body: built.body,
-          message: "Kindroid rejected the learned context (400). This part of the API isn't documented and may have changed, or a field is too long. Nothing was changed." };
+          message: "Kindroid rejected the learned context (400" + (why400 ? ": " + why400 : "") + "). This part of the API isn't documented and may have changed, or a field is too long. Nothing was changed." };
+      }
+      if (st >= 500) {
+        /* Verified live Nov 14 2026: an AI ID that doesn't exist gets a 500 here, not a 404. */
+        return { ok: false, state: "error", sentRevision: built.body.developed_context_revision, body: built.body,
+          message: "Kindroid had a server error (" + st + "). Nothing was changed. Kindroid also answers this way when the AI ID doesn't belong to a Kin on your account, so check the AI ID on this character, then try again in a minute." };
       }
       return { ok: false, state: "error", sentRevision: built.body.developed_context_revision, body: built.body, message: redact((e && e.message) || "Push failed.") };
     }

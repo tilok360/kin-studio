@@ -177,6 +177,38 @@ test("pushLearnedContext: 400 says the endpoint may have changed; invalid input 
   assert.equal(call2.calls.length, 0);
 });
 
+test("live-verified shapes (Nov 14 2026): plain-text 400 reason shown, 409 text detected, 500 hints at a wrong AI ID", async () => {
+  // 400 bodies are plain-text schema messages; show Kindroid's reason.
+  const c400 = gatedCall(new K.RateGate(), () => { throw httpErr(400, '"developed_context_revision" must be greater than or equal to 0'); });
+  const r400 = await K.pushLearnedContext({ call: c400, ai_id: AI, fields: {}, revision: 1 });
+  assert.equal(r400.state, "bad_request");
+  assert.match(r400.message, /must be greater than or equal to 0/);
+  // The real 409 body: plain text, no revision number.
+  const real409 = "Learned context changed while you were editing it. Try again.";
+  const c409 = gatedCall(new K.RateGate(), () => { throw httpErr(409, real409); });
+  const r409 = await K.pushLearnedContext({ call: c409, ai_id: AI, fields: {}, revision: 999999999 });
+  assert.equal(r409.state, "conflict");
+  assert.equal(r409.serverRevision, null);
+  assert.equal(K.revisionFromBody(real409), null);
+  // Even if the status got lost, the text alone marks a conflict.
+  const cTxt = gatedCall(new K.RateGate(), () => { const e = new Error(real409); e.body = real409; throw e; });
+  assert.equal((await K.pushLearnedContext({ call: cTxt, ai_id: AI, fields: {}, revision: 2 })).state, "conflict");
+  // Nonexistent AI ID with developed_context: Kindroid answers 500.
+  const c500 = gatedCall(new K.RateGate(), () => { throw httpErr(500, "Server error - please try again in a bit."); });
+  const r500 = await K.pushLearnedContext({ call: c500, ai_id: AI, fields: {}, revision: 1 });
+  assert.equal(r500.state, "error");
+  assert.match(r500.message, /AI ID/);
+  assert.match(r500.message, /Nothing was changed/);
+  // Persona switch 400 shows Kindroid's reason and sends nothing.
+  const cp = gatedCall(new K.RateGate(), () => { throw httpErr(400, '"active_persona_id" must be a string'); });
+  let sent = false;
+  await assert.rejects(
+    K.sendAsPersona({ call: cp, ai_id: AI, persona: GATOR, home: HOME, send: async () => { sent = true; } }),
+    (e) => e.kind === "persona_switch" && /must be a string/.test(e.message) && /Nothing was sent/.test(e.message)
+  );
+  assert.equal(sent, false);
+});
+
 test("error messages never include the API key", async () => {
   const key = "kn_TESTKEY_DO_NOT_SHIP_abcdefghijklmnop";
   const call = gatedCall(new K.RateGate(), () => { throw new Error("boom Bearer " + key); });

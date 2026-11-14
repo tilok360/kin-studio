@@ -9,7 +9,7 @@ Talk as a different persona, and edit what your Kin has learned. Windows, Androi
 - **This switches your persona everywhere in your Kindroid account while it sends,** including the Kindroid app. It takes a second or two, but if you message from the Kindroid app at that exact moment, that message could go out as the wrong persona. The app warns you the first time.
 - Set it up on the Personas tab:
   - Tick **"Switch back to this one"** on your usual persona. Kindroid can't tell apps which persona you normally use, so Talk as stays off until you pick one.
-  - Optionally add the persona's **Kindroid persona ID** for a full switch, including the backstory. Without an ID, Talk as only changes the name and gender your Kins see. A persona attached to a chat inside Kindroid overrides that.
+  - Optionally add the persona's **Kindroid persona ID** for a full switch, including the backstory. Without an ID, Talk as only changes the name and gender your Kins see. A persona attached to a chat inside Kindroid overrides that. Copy the ID exactly. Kindroid accepts any ID without checking, so a wrong one won't show an error. It just won't switch.
 - Your choice is remembered for each Kin and each group.
 - Each message sent this way uses 3 of Kindroid's 10 requests per 30 seconds (switch, send, switch back). They share the app's usual queue, so Chat, Games and Stream mode still don't trip the limit.
 - If Kindroid refuses the switch, nothing is sent, and the app asks if you want to send it as your current persona instead.
@@ -23,7 +23,9 @@ Talk as a different persona, and edit what your Kin has learned. Windows, Androi
 - **Revision number.** Kindroid counts every change to Learned context, including lines your Kin learns on its own, and refuses a push made against an old count. The Kindroid app doesn't show this number.
   - If you leave it blank, Kin Studio tries 0. That's a guess.
   - If Kindroid refuses, you'll see: "Kindroid said the learned context changed… Nothing was changed." Re-copy the fields from Kindroid, then push again.
-  - If Kindroid's reply includes the current number, a **Use revision N** button fills it in for you.
+  - Kindroid doesn't send the current number back when it refuses (checked Nov 14). If a later Kindroid update starts including it, a **Use revision N** button fills it in for you.
+- When Kindroid rejects a push, the app now shows Kindroid's own reason, like a missing field or a negative revision.
+- If the AI ID is wrong, Kindroid answers with a server error instead of "not found". The app now says to check the AI ID.
 - Every push is saved on your device with its time and revision, including refused ones (the last 15 per Kin). **Put back in the fields** brings an old copy back.
 - The regular **Push to Kindroid** button is unchanged and never touches Learned context.
 
