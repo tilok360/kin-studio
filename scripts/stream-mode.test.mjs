@@ -381,15 +381,15 @@ test("main-process HTTP helper only reaches Twitch and Joystick over https", asy
 });
 
 /* ---------- wiring ---------- */
-test("phone app gets no stream code; Windows preload exposes it; versions are 1.18.0 / 2.7 / 18", () => {
+test("phone app gets no stream code; Windows preload exposes it; versions are 1.18.0-test3 / 2.7 / 19", () => {
   const html = readFileSync(join(here, "../public/phone.html"), "utf8");
   assert.doesNotMatch(html, /<script src="\/stream-(core|mode)\.js">/);
   assert.match(html, /if\(!\(window\.KinDesktop&&window\.KinDesktop\.stream\)\)return;/);
-  assert.match(html, /app:"1\.18\.0",androidName:"2\.7",androidCode:18/);
+  assert.match(html, /app:"1\.18\.0-test3",androidName:"2\.7",androidCode:19/);
   const pre = readFileSync(join(here, "../desktop/app/preload.js"), "utf8");
   assert.match(pre, /stream: \{/);
   const apk = JSON.parse(readFileSync(join(here, "../apk-version.json"), "utf8"));
-  assert.equal(apk.versionName, "2.7"); assert.equal(apk.versionCode, 18);
+  assert.equal(apk.versionName, "2.7"); assert.equal(apk.versionCode, 19);
   const mode = readFileSync(join(here, "../public/stream-mode.js"), "utf8");
   assert.doesNotMatch(mode, /localStorage\.setItem\([^)]*token/i);
   assert.doesNotMatch(mode, /kokoroId\s*=|voices\(\)\.push|saveVoices\(/, "stream mode must not change Kokoro voices");

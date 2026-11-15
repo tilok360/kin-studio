@@ -1,7 +1,7 @@
 {
-  "app": "1.18.0",
+  "app": "1.18.0-test3",
   "applicationId": "com.kinvoicehelper.app",
   "versionName": "2.7",
-  "versionCode": 18,
-  "notes": "Apply these values in the Capacitor Android project at APK build time. This repo has no android/ Gradle tree. 1.16.0 is versionName 2.5 / versionCode 16, 1.17.0 is 2.6 / 17, so 1.18.0 is 2.7 / 18, signed with the same 1.14.1 key. Stream mode is Windows-only; the APK gets no stream code."
+  "versionCode": 19,
+  "notes": "Apply these values in the Capacitor Android project at APK build time. This repo has no android/ Gradle tree. 1.16.0 is versionName 2.5 / versionCode 16, 1.17.0 is 2.6 / 17, so 1.18.0-test3 is 2.7 / 19 (test2 was 18), signed with the same 1.14.1 key. Stream mode is Windows-only; the APK gets no stream code."
 }

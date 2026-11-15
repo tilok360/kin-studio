@@ -16,19 +16,19 @@ const urlf = readFileSync(join(root, "public/downloads/Kin-Studio-Windows.url"),
 const APK = "https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk";
 const SITE = "https://kin-studio1.grok.me";
 
-test("package and apk-version are 1.18.0 / 2.7 / 18", () => {
-  assert.equal(pkg.version, "1.18.0");
-  assert.equal(apk.app, "1.18.0");
+test("package and apk-version are 1.18.0-test3 / 2.7 / 19", () => {
+  assert.equal(pkg.version, "1.18.0-test3");
+  assert.equal(apk.app, "1.18.0-test3");
   assert.equal(apk.versionName, "2.7");
-  assert.equal(apk.versionCode, 18);
+  assert.equal(apk.versionCode, 19);
   assert.equal(apk.applicationId, "com.kinvoicehelper.app");
 });
 
-test("phone.html is 1.18.0 and points at the new site and latest APK", () => {
+test("phone.html is 1.18.0-test3 and points at the new site and latest APK", () => {
   assert.match(html, /Kin Studio 1\.18\.0/);
-  assert.match(html, /androidCode:18/);
+  assert.match(html, /androidCode:19/);
   assert.match(html, /androidName:"2\.7"/);
-  assert.match(html, /versionCode 18/);
+  assert.match(html, /versionCode 19/);
   assert.match(html, new RegExp(SITE.replace(/[.]/g, "\\.")));
   assert.match(html, new RegExp(APK.replace(/[.]/g, "\\.")));
   assert.match(html, /id="btnChatCancel"/);
@@ -68,4 +68,12 @@ test("README, bat, and Windows shortcut use the new site; APK is latest/download
   assert.ok(!urlf.includes("https://kin-studio.grok.me"));
   assert.ok(urlf.includes("https://kin-studio1.grok.me"));
   assert.ok(existsSync(join(root, "public/kin-client.js")));
+});
+
+
+test("learned context editor is hidden behind LC_EDITOR_ENABLED=false", () => {
+  assert.match(html, /const LC_EDITOR_ENABLED=false/);
+  assert.match(html, /id="lcBox" hidden/);
+  assert.match(html, /if\(!LC_EDITOR_ENABLED\)/);
+  assert.match(html, /#lcBox\[hidden\]/);
 });
