@@ -11,11 +11,11 @@
 <meta name="apple-mobile-web-app-title" content="Kin Studio">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/__grok/manifest.webmanifest">
-<title>Kin Studio 1.18.0-test3</title>
-<meta name="kin-studio-version" content="1.18.0-test3">
+<title>Kin Studio 1.18.0</title>
+<meta name="kin-studio-version" content="1.18.0">
 <meta name="kin-studio-android" content="2.7 (18)">
 <script>window.KinKokoro={lastError:"",warmup:async()=>{},speak:async()=>{},interrupt(){}};</script>
-<script>window.KIN_STUDIO={app:"1.18.0-test3",androidName:"2.7",androidCode:19,publicUrl:"https://kin-studio1.grok.me/",apkUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk",exeUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe"};</script>
+<script>window.KIN_STUDIO={app:"1.18.0",androidName:"2.7",androidCode:20,publicUrl:"https://kin-studio1.grok.me/",apkUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.apk",exeUrl:"https://github.com/tilok360/kin-studio/releases/latest/download/Kin-Studio.exe"};</script>
 <script src="/kin-client.js"></script>
 <script>
 /* === KIN_CLIENT_INLINE_START === */
@@ -1695,7 +1695,7 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
     </p>
     <div class="section">Kokoro</div>
     <p class="hint">Voices tab → pick a named English model → Test. First play loads the on-device model. Stop or Send cuts speech.</p>
-    <p class="ver-foot" id="verFoot">Kin Studio 1.18.0-test3 · Android 2.7 (versionCode 19)</p>
+    <p class="ver-foot" id="verFoot">Kin Studio 1.18.0 · Android 2.7 (versionCode 20)</p>
   </div>
 </section>
 
@@ -1729,7 +1729,7 @@ html.wiz-open,html.wiz-open body{overflow:hidden}
     <p class="hint">The <strong>● Kindroid</strong> badge at the top shows the connection. If it says waiting, Kindroid's limit of 10 requests every 30 seconds was reached and the app is counting down. Tap it for <strong>Fix my connection</strong>.</p>
     <p class="hint"><strong>Send to iPhone</strong> — tap iPhone → Send to someone. They open the link in Safari → Share → Add to Home Screen. Each person uses their own kn_ key. Do not send your key.</p>
     <p class="hint"><strong>iPhone install</strong> — open <a href="https://kin-studio1.grok.me/">https://kin-studio1.grok.me/</a> in Safari (not Chrome). Share → Add to Home Screen. Same studio, full screen. Apple does not allow an unsigned iPhone app file like the Android APK. (The old kin-studio.grok.me address is retired.)</p>
-    <p class="hint"><strong>Android</strong> — tap Android to get the latest APK from GitHub (<code>releases/latest/download/Kin-Studio.apk</code>). If you already installed 1.14.1 or newer (the new signing key), 1.18.0 installs over it — do not uninstall. If you are still on an APK from before 1.14.1, export your characters first, then uninstall and install. This build is versionCode 19 / versionName 2.7.</p>
+    <p class="hint"><strong>Android</strong> — tap Android to get the latest APK from GitHub (<code>releases/latest/download/Kin-Studio.apk</code>). If you already installed 1.14.1 or newer (the new signing key), 1.18.0 installs over it — do not uninstall. If you are still on an APK from before 1.14.1, export your characters first, then uninstall and install. This build is versionCode 20 / versionName 2.7.</p>
     <p class="hint"><strong>Windows</strong> — tap Windows and open <strong>Kin-Studio.exe</strong>. It is its own window. Not a Chrome tab. Not Edge.</p>
     <p class="hint"><strong>Guide</strong> — this page<br>
     <p class="hint"><strong>Chat</strong> — 1:1 send, listen, rewind. History loads the old thread so Replay works on past lines. Import the Kindroid chat-exporter JSON if you already downloaded it.<br>
@@ -5167,7 +5167,7 @@ function collectBackup(){
   });
   var payload={
     format:'kin-studio-backup-v1',
-    app:'Kin Studio 1.18.0-test3',
+    app:'Kin Studio 1.18.0',
     exportedAt:new Date().toISOString(),
     characters:chars(),
     personas:personas(),

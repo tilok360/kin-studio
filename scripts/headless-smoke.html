@@ -78,8 +78,8 @@
     await iframeReady;
     const win = frame.contentWindow;
     const doc = frame.contentDocument;
-    ok("iframe 1.18.0", !!(win.KIN_STUDIO && win.KIN_STUDIO.app === "1.18.0-test3"), win.KIN_STUDIO && win.KIN_STUDIO.app);
-    ok("iframe android 2.7 / 18", !!(win.KIN_STUDIO && win.KIN_STUDIO.androidName === "2.7" && win.KIN_STUDIO.androidCode === 19));
+    ok("iframe 1.18.0", !!(win.KIN_STUDIO && win.KIN_STUDIO.app === "1.18.0"), win.KIN_STUDIO && win.KIN_STUDIO.app);
+    ok("iframe android 2.7 / 20", !!(win.KIN_STUDIO && win.KIN_STUDIO.androidName === "2.7" && win.KIN_STUDIO.androidCode === 20));
     ok("iframe APK url", !!(win.KIN_STUDIO && /releases\/latest\/download\/Kin-Studio\.apk$/.test(win.KIN_STUDIO.apkUrl)));
     ok("iframe publicUrl", !!(win.KIN_STUDIO && /kin-studio1\.grok\.me/.test(win.KIN_STUDIO.publicUrl)));
     ok("iframe KinClient", !!(win.KinClient && win.KinClient.sendMessage));

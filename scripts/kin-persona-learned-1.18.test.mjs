@@ -240,7 +240,7 @@ test("Talk as is labelled Experimental in Personas, Chat, Groups, the first-use 
   assert.match(html, /for="chatTalkAs"[^>]*>Talk as <span class="badge-exp">Experimental<\/span>/);
   assert.match(html, /<label>Talk as <span class="badge-exp">Experimental<\/span><\/label>\s*<select id="gTalkAs">/);
   assert.match(html, /Talk as is EXPERIMENTAL/);
-  const notes = readFileSync(join(here, "../RELEASE-NOTES-1.18.0-draft.md"), "utf8");
+  const notes = readFileSync(join(here, "../RELEASE-NOTES-1.18.0.md"), "utf8");
   assert.match(notes, /## Talk as .*Experimental/);
   assert.match(notes, /persona didn't change/);
 });
